@@ -1,0 +1,24 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}" />
+    <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}" />
+    <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource SecondaryColor}" />
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+    <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryGold}" />
+    <SolidColorBrush x:Key="ForegroundBrush" Color="{StaticResource ForegroundColor}" />
+    <SolidColorBrush x:Key="MutedForegroundBrush" Color="{StaticResource MutedForegroundColor}" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource ErrorColor}" />
+    <SolidColorBrush x:Key="GoldBorderBrush" Color="#26D4A574" />
+    <SolidColorBrush x:Key="CardOverlayBrush" Color="#8016161F" />
+
+    <LinearGradientBrush x:Key="GoldGradientBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="{StaticResource PrimaryGold}" Offset="0" />
+        <GradientStop Color="{StaticResource DarkGold}" Offset="1" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="SelectedTrackBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#33D4A574" Offset="0" />
+        <GradientStop Color="#14D4A574" Offset="1" />
+    </LinearGradientBrush>
+</ResourceDictionary>

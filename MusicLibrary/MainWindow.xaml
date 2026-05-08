@@ -1,12 +1,101 @@
-﻿<Window x:Class="MusicLibrary.MainWindow"
+<Window x:Class="MusicLibrary.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:MusicLibrary"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="Музыкальная Библиотека"
+        Width="1180"
+        Height="760"
+        MinWidth="980"
+        MinHeight="640"
+        FontFamily="{StaticResource BodyFont}"
+        Background="{StaticResource BackgroundBrush}">
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="106" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
+        <Border Background="{StaticResource CardOverlayBrush}" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,0,1" Padding="32,22">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Border Width="52" Height="52" CornerRadius="14" Background="{StaticResource GoldGradientBrush}">
+                    <TextBlock Text="♪" FontSize="28" FontWeight="Bold" Foreground="{StaticResource BackgroundBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="Музыкальная Библиотека" FontFamily="{StaticResource HeadingFont}" Foreground="{StaticResource PrimaryBrush}" FontSize="26" FontWeight="SemiBold" />
+                    <TextBlock Text="Премиальная коллекция" Foreground="{StaticResource MutedForegroundBrush}" FontSize="14" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="45*" />
+                <ColumnDefinition Width="30*" />
+                <ColumnDefinition Width="25*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="#4D16161F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,1,0">
+                <DockPanel Margin="24">
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,18">
+                        <TextBlock Text="Фильтр по жанру" Foreground="{StaticResource ForegroundBrush}" FontWeight="SemiBold" FontSize="18" Margin="0,0,0,10" />
+                        <ComboBox ItemsSource="{Binding Genres}"
+                                  SelectedItem="{Binding SelectedGenre, Mode=TwoWay}"
+                                  Style="{StaticResource GenreComboBoxStyle}" />
+                    </StackPanel>
+                    <ListBox ItemsSource="{Binding DisplayedTracks}"
+                             SelectedItem="{Binding SelectedTrack, Mode=TwoWay}"
+                             ItemTemplate="{StaticResource TrackCardTemplate}"
+                             ItemContainerStyle="{StaticResource TrackListBoxItemStyle}"
+                             Style="{StaticResource PanelListBoxStyle}" />
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Column="1" Background="#3316161F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,1,0" Padding="28">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel VerticalAlignment="Center">
+                        <Border Width="196" Height="196" CornerRadius="18" Background="{StaticResource AccentBrush}" BorderBrush="{StaticResource PrimaryBrush}" BorderThickness="2" HorizontalAlignment="Center">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#D4A574" BlurRadius="35" ShadowDepth="0" Opacity="0.22" />
+                            </Border.Effect>
+                            <TextBlock Text="♪" Foreground="{StaticResource PrimaryBrush}" FontSize="78" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+
+                        <TextBlock Text="{Binding SelectedTrack.Title, TargetNullValue='Выберите трек'}" Foreground="{StaticResource ForegroundBrush}" FontSize="22" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap" Margin="0,24,0,6" />
+                        <TextBlock Text="{Binding SelectedTrack.Artist}" Foreground="{StaticResource MutedForegroundBrush}" FontSize="15" TextAlignment="Center" />
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,14,0,20">
+                            <Border Background="#1AD4A574" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="12,5">
+                                <TextBlock Text="{Binding SelectedTrack.Genre}" Foreground="{StaticResource PrimaryBrush}" />
+                            </Border>
+                            <TextBlock Text="{Binding SelectedTrack.DurationText}" Foreground="{StaticResource MutedForegroundBrush}" Margin="12,5,0,0" />
+                        </StackPanel>
+
+                        <ProgressBar Minimum="0" Maximum="{Binding ProgressMaximum}" Value="{Binding ProgressValue}" Height="8" Foreground="{StaticResource PrimaryBrush}" Background="{StaticResource AccentBrush}" Margin="0,0,0,8" />
+                        <DockPanel Margin="0,0,0,18">
+                            <TextBlock Text="{Binding CurrentPositionText}" Foreground="{StaticResource MutedForegroundBrush}" DockPanel.Dock="Left" />
+                            <TextBlock Text="{Binding CurrentDurationText}" Foreground="{StaticResource MutedForegroundBrush}" HorizontalAlignment="Right" />
+                        </DockPanel>
+
+                        <Button Content="{Binding PlayPauseText}" Command="{Binding PlayPauseCommand}" Style="{StaticResource PrimaryButtonStyle}" Margin="0,0,0,10" />
+                        <Button Content="Стоп" Command="{Binding StopCommand}" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,0,10" />
+                        <Button Content="Сохранить" Command="{Binding SaveTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" />
+
+                        <TextBlock Text="{Binding StatusMessage}"
+                                   Foreground="{Binding StatusKind, Converter={StaticResource StatusKindToBrushConverter}}"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   Margin="0,18,0,0" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <Border Grid.Column="2" Background="#4D16161F" Padding="24">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="История прослушиваний" Foreground="{StaticResource ForegroundBrush}" FontWeight="SemiBold" FontSize="18" Margin="0,0,0,18" />
+                    <ListBox ItemsSource="{Binding PlaybackHistory}"
+                             ItemTemplate="{StaticResource HistoryItemTemplate}"
+                             Style="{StaticResource PanelListBoxStyle}" />
+                </DockPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>
