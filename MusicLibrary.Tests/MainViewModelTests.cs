@@ -54,7 +54,28 @@ public sealed class MainViewModelTests
         Assert.Single(viewModel.PlaybackHistory);
     }
 
+    [Fact]
+    public void MediaFailed_ResetsPlaybackStateAndDuration()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
+
+        viewModel.PlayPauseCommand.Execute(null);
+        player.RaiseFailedForTest("unsupported format");
+
+        Assert.False(viewModel.IsPlaying);
+        Assert.Equal("Воспроизвести", viewModel.PlayPauseText);
+        Assert.Equal(TimeSpan.Zero, viewModel.CurrentPosition);
+        Assert.Equal(TimeSpan.Zero, viewModel.CurrentDuration);
+        Assert.Contains("unsupported format", viewModel.StatusMessage);
+    }
+
     private static MainViewModel CreateViewModel()
+    {
+        return CreateViewModelWithPlayer().ViewModel;
+    }
+
+    private static (MainViewModel ViewModel, FakeAudioPlayerService Player) CreateViewModelWithPlayer()
     {
         var tracks = new[]
         {
@@ -62,11 +83,14 @@ public sealed class MainViewModelTests
             new Track { Id = 2, Title = "Jazz Song", Artist = "Quartet", Genre = "Джаз", Duration = TimeSpan.FromSeconds(120), FilePath = "jazz.mp3" }
         };
 
-        return new MainViewModel(
+        var player = new FakeAudioPlayerService();
+        var viewModel = new MainViewModel(
             new FakeTrackRepository(tracks),
             new FakeFileService(),
             new FakeSaveFileDialogService(),
-            new FakeAudioPlayerService());
+            player);
+
+        return (viewModel, player);
     }
 
     private sealed class FakeTrackRepository : ITrackRepository

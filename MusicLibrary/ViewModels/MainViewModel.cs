@@ -53,7 +53,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         _audioPlayerService.MediaOpened += (_, _) => RefreshDuration();
         _audioPlayerService.MediaEnded += (_, _) => HandleMediaEnded();
-        _audioPlayerService.MediaFailed += (_, message) => SetStatus(OperationResult.Error($"Ошибка воспроизведения: {message}"));
+        _audioPlayerService.MediaFailed += (_, message) => HandleMediaFailed(message);
 
         _progressTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _progressTimer.Tick += (_, _) => RefreshProgress();
@@ -229,6 +229,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _isPaused = false;
         _loadedTrack = null;
         CurrentPosition = TimeSpan.Zero;
+        CurrentDuration = TimeSpan.Zero;
     }
 
     private void SaveSelectedTrack()
@@ -283,7 +284,19 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _isPaused = false;
         _loadedTrack = null;
         CurrentPosition = TimeSpan.Zero;
+        CurrentDuration = TimeSpan.Zero;
         SetStatus(OperationResult.Info("Воспроизведение завершено."));
+    }
+
+    private void HandleMediaFailed(string message)
+    {
+        _progressTimer.Stop();
+        IsPlaying = false;
+        _isPaused = false;
+        _loadedTrack = null;
+        CurrentPosition = TimeSpan.Zero;
+        CurrentDuration = TimeSpan.Zero;
+        SetStatus(OperationResult.Error($"Ошибка воспроизведения: {message}"));
     }
 
     private void SetStatus(OperationResult result)

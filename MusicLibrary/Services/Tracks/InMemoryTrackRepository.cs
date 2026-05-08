@@ -23,7 +23,7 @@ public sealed class InMemoryTrackRepository : ITrackRepository
                 Artist = "Ludwig van Beethoven",
                 Genre = "Классика",
                 Duration = TimeSpan.FromSeconds(332),
-                FilePath = Path.Combine(musicFolder, "moonlight-sonata.mp3"),
+                FilePath = Path.Combine(musicFolder, "moonlight-sonata.wav"),
                 CoverPath = Path.Combine(coversFolder, "classic.jpg")
             },
             new()
@@ -33,7 +33,7 @@ public sealed class InMemoryTrackRepository : ITrackRepository
                 Artist = "Miles Davis",
                 Genre = "Джаз",
                 Duration = TimeSpan.FromSeconds(337),
-                FilePath = Path.Combine(musicFolder, "blue-in-green.mp3"),
+                FilePath = Path.Combine(musicFolder, "blue-in-green.wav"),
                 CoverPath = Path.Combine(coversFolder, "jazz.jpg")
             },
             new()
@@ -43,7 +43,7 @@ public sealed class InMemoryTrackRepository : ITrackRepository
                 Artist = "Queen",
                 Genre = "Рок",
                 Duration = TimeSpan.FromSeconds(355),
-                FilePath = Path.Combine(musicFolder, "bohemian-rhapsody.mp3"),
+                FilePath = Path.Combine(musicFolder, "bohemian-rhapsody.wav"),
                 CoverPath = Path.Combine(coversFolder, "rock.jpg")
             },
             new()
@@ -53,7 +53,7 @@ public sealed class InMemoryTrackRepository : ITrackRepository
                 Artist = "Dave Brubeck",
                 Genre = "Джаз",
                 Duration = TimeSpan.FromSeconds(324),
-                FilePath = Path.Combine(musicFolder, "take-five.mp3"),
+                FilePath = Path.Combine(musicFolder, "take-five.wav"),
                 CoverPath = Path.Combine(coversFolder, "jazz.jpg")
             },
             new()
@@ -63,7 +63,7 @@ public sealed class InMemoryTrackRepository : ITrackRepository
                 Artist = "Claude Debussy",
                 Genre = "Классика",
                 Duration = TimeSpan.FromSeconds(282),
-                FilePath = Path.Combine(musicFolder, "clair-de-lune.mp3"),
+                FilePath = Path.Combine(musicFolder, "clair-de-lune.wav"),
                 CoverPath = Path.Combine(coversFolder, "classic.jpg")
             },
             new()
@@ -73,7 +73,7 @@ public sealed class InMemoryTrackRepository : ITrackRepository
                 Artist = "Led Zeppelin",
                 Genre = "Рок",
                 Duration = TimeSpan.FromSeconds(482),
-                FilePath = Path.Combine(musicFolder, "stairway-to-heaven.mp3"),
+                FilePath = Path.Combine(musicFolder, "stairway-to-heaven.wav"),
                 CoverPath = Path.Combine(coversFolder, "rock.jpg")
             }
         };

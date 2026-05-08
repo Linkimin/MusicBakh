@@ -13,7 +13,7 @@ public sealed class SaveFileDialogService : ISaveFileDialogService
         var dialog = new SaveFileDialog
         {
             FileName = suggestedFileName,
-            Filter = "MP3-файлы (*.mp3)|*.mp3|Все файлы (*.*)|*.*",
+            Filter = "Аудиофайлы (*.mp3;*.wav)|*.mp3;*.wav|MP3-файлы (*.mp3)|*.mp3|WAV-файлы (*.wav)|*.wav|Все файлы (*.*)|*.*",
             OverwritePrompt = true
         };
 
