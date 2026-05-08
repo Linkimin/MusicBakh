@@ -9,4 +9,9 @@
     <LangVersion>14.0</LangVersion>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Update="Music\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Covers\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
