@@ -71,7 +71,7 @@
                             <TextBlock Text="{Binding SelectedTrack.DurationText}" Foreground="{StaticResource MutedForegroundBrush}" Margin="12,5,0,0" />
                         </StackPanel>
 
-                        <ProgressBar Minimum="0" Maximum="{Binding ProgressMaximum}" Value="{Binding ProgressValue}" Height="8" Foreground="{StaticResource PrimaryBrush}" Background="{StaticResource AccentBrush}" Margin="0,0,0,8" />
+                        <ProgressBar Minimum="0" Maximum="{Binding ProgressMaximum, Mode=OneWay}" Value="{Binding ProgressValue, Mode=OneWay}" Height="8" Foreground="{StaticResource PrimaryBrush}" Background="{StaticResource AccentBrush}" Margin="0,0,0,8" />
                         <DockPanel Margin="0,0,0,18">
                             <TextBlock Text="{Binding CurrentPositionText}" Foreground="{StaticResource MutedForegroundBrush}" DockPanel.Dock="Left" />
                             <TextBlock Text="{Binding CurrentDurationText}" Foreground="{StaticResource MutedForegroundBrush}" HorizontalAlignment="Right" />
