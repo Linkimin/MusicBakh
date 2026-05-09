@@ -1,5 +1,10 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:converters="clr-namespace:MusicLibrary.Converters">
+    <!-- Конвертер объявлен здесь, потому что MultiBinding.Converter резолвится при загрузке шаблона
+         и не видит ключей, добавленных в родительский ResourceDictionary после этого MergedDictionary. -->
+    <converters:TrackIdentityMatchConverter x:Key="TrackIdentityMatchConverter" />
+
     <DataTemplate x:Key="TrackCardTemplate">
         <Border x:Name="CardRoot" Padding="14" CornerRadius="12" Background="{StaticResource AccentBrush}" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" Cursor="Hand">
             <Border.InputBindings>
