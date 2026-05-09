@@ -65,6 +65,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         SaveTrackCommand = new RelayCommand(_ => SaveSelectedTrack(), _ => SelectedTrack is not null);
         AddTrackCommand = new RelayCommand(_ => OpenAddTrackDialog(), _ => _addTrackDialogService is not null && _userTrackStorage is not null);
         DeleteTrackCommand = new RelayCommand(_ => DeleteSelectedTrack(), _ => CanDeleteSelected);
+        PlayTrackCommand = new RelayCommand(
+            parameter => PlaySpecificTrack(parameter as Track),
+            parameter => parameter is Track);
+        ReplayHistoryEntryCommand = new RelayCommand(
+            parameter => ReplayHistoryEntry(parameter as PlaybackEntry),
+            parameter => parameter is PlaybackEntry);
 
         _audioPlayerService.MediaOpened += (_, filePath) => HandleMediaOpened(filePath);
         _audioPlayerService.MediaEnded += (_, _) => HandleMediaEnded();
@@ -83,6 +89,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ICommand SaveTrackCommand { get; }
     public ICommand AddTrackCommand { get; }
     public ICommand DeleteTrackCommand { get; }
+    public ICommand PlayTrackCommand { get; }
+    public ICommand ReplayHistoryEntryCommand { get; }
 
     public string SelectedGenre
     {
@@ -352,13 +360,41 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        if (!_fileService.Exists(SelectedTrack.FilePath))
+        StartOrResumeTrack(SelectedTrack);
+    }
+
+    private void PlaySpecificTrack(Track? track)
+    {
+        if (track is null)
         {
-            SetStatus(OperationResult.Error($"Файл не найден: {SelectedTrack.FilePath}"));
             return;
         }
 
-        bool isResume = _isPaused && PlayingTrack is not null && PlayingTrack.Id == SelectedTrack.Id;
+        SelectedTrack = track;
+        StartOrResumeTrack(track);
+    }
+
+    private void ReplayHistoryEntry(PlaybackEntry? entry)
+    {
+        if (entry?.Track is null)
+        {
+            return;
+        }
+
+        PlaySpecificTrack(entry.Track);
+    }
+
+    private void StartOrResumeTrack(Track track)
+    {
+        // Every playback entry point goes through this method so the Play button,
+        // library double-click, and history replay keep identical pause/history rules.
+        if (!_fileService.Exists(track.FilePath))
+        {
+            SetStatus(OperationResult.Error($"Файл не найден: {track.FilePath}"));
+            return;
+        }
+
+        bool isResume = _isPaused && PlayingTrack is not null && PlayingTrack.Id == track.Id;
 
         if (!isResume)
         {
@@ -367,9 +403,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 ResetPlaybackState();
             }
 
-            OperationResult openResult = _audioPlayerService.Open(SelectedTrack.FilePath);
+            PlayingTrack = track;
+            _pendingHistoryTrack = track;
+
+            OperationResult openResult = _audioPlayerService.Open(track.FilePath);
             if (!openResult.IsSuccess)
             {
+                ResetPlaybackState();
                 SetStatus(openResult);
                 return;
             }
@@ -383,12 +423,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             IsPlaying = true;
             _isPaused = false;
             _progressTimer.Start();
+            return;
+        }
 
-            if (!isResume)
-            {
-                PlayingTrack = SelectedTrack;
-                _pendingHistoryTrack = SelectedTrack;
-            }
+        if (!isResume)
+        {
+            ResetPlaybackState();
         }
     }
 

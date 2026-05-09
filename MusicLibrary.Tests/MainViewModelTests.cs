@@ -187,6 +187,49 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void PlayTrackCommand_SelectsTrackAndStartsPlayback()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        Track second = viewModel.DisplayedTracks[1];
+
+        viewModel.PlayTrackCommand.Execute(second);
+
+        Assert.Equal(second, viewModel.SelectedTrack);
+        Assert.Equal(second, viewModel.PlayingTrack);
+        Assert.True(viewModel.IsPlaying);
+        Assert.Equal(second.FilePath, player.LastOpenedFilePath);
+    }
+
+    [Fact]
+    public void PlayTrackCommand_IgnoresNonTrackParameter()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+
+        viewModel.PlayTrackCommand.Execute("not a track");
+
+        Assert.Null(viewModel.SelectedTrack);
+        Assert.Null(viewModel.PlayingTrack);
+        Assert.False(viewModel.IsPlaying);
+        Assert.Null(player.LastOpenedFilePath);
+    }
+
+    [Fact]
+    public void ReplayHistoryEntryCommand_SelectsEntryTrackAndStartsPlayback()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        Track second = viewModel.DisplayedTracks[1];
+        var entry = new PlaybackEntry { Track = second, PlayedAt = DateTime.Now };
+        viewModel.PlaybackHistory.Add(entry);
+
+        viewModel.ReplayHistoryEntryCommand.Execute(entry);
+
+        Assert.Equal(second, viewModel.SelectedTrack);
+        Assert.Equal(second, viewModel.PlayingTrack);
+        Assert.True(viewModel.IsPlaying);
+        Assert.Equal(second.FilePath, player.LastOpenedFilePath);
+    }
+
+    [Fact]
     public void StopCommand_NotInvocable_WhenNothingIsPlaying()
     {
         var viewModel = CreateViewModel();
