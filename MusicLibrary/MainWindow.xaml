@@ -1,7 +1,7 @@
 <Window x:Class="MusicLibrary.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Музыкальная Библиотека"
+        Title="MusicBakh"
         Width="1180"
         Height="760"
         MinWidth="980"
@@ -14,14 +14,27 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Border Background="{StaticResource CardOverlayBrush}" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,0,1" Padding="32,22">
+        <Border Background="{StaticResource CardOverlayBrush}" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,0,1" Padding="28,18">
             <DockPanel VerticalAlignment="Center">
-                <Button DockPanel.Dock="Right" Content="＋ Добавить трек" Command="{Binding AddTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" Height="44" Padding="18,0" />
+                <Button DockPanel.Dock="Right" Content="＋ Добавить трек" Command="{Binding AddTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" Height="42" Padding="18,0" />
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="52" Height="52" CornerRadius="14" Background="{StaticResource GoldGradientBrush}">
-                        <TextBlock Text="♪" FontSize="28" FontWeight="Bold" Foreground="{StaticResource BackgroundBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <Border Width="54" Height="54" CornerRadius="12" Background="{StaticResource GoldGradientBrush}">
+                        <Grid>
+                            <TextBlock Text="MB" FontSize="18" FontWeight="Bold" Foreground="{StaticResource BackgroundBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,8" />
+                            <Polyline Points="12,38 18,32 24,36 30,26 36,34 42,30"
+                                      Stroke="{StaticResource BackgroundBrush}"
+                                      StrokeThickness="2"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      VerticalAlignment="Bottom"
+                                      Margin="0,0,0,8" />
+                        </Grid>
                     </Border>
-                    <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" Text="Музыкальная Библиотека" FontFamily="{StaticResource HeadingFont}" Foreground="{StaticResource PrimaryBrush}" FontSize="26" FontWeight="SemiBold" />
+                    <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="MusicBakh" FontFamily="{StaticResource HeadingFont}" Foreground="{StaticResource PrimaryBrush}" FontSize="28" FontWeight="SemiBold" />
+                        <TextBlock Text="Музыкальная библиотека" Foreground="{StaticResource MutedForegroundBrush}" FontSize="13" Margin="1,2,0,0" />
+                    </StackPanel>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -49,10 +62,10 @@
                 </DockPanel>
             </Border>
 
-            <Border Grid.Column="1" Background="#3316161F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,1,0" Padding="28">
+            <Border Grid.Column="1" Background="#3316161F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,1,0" Padding="24">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
                     <StackPanel VerticalAlignment="Center">
-                        <Border Width="196" Height="196" CornerRadius="18" BorderBrush="{StaticResource PrimaryBrush}" BorderThickness="2" HorizontalAlignment="Center">
+                        <Border Width="176" Height="176" CornerRadius="16" BorderBrush="{StaticResource PrimaryBrush}" BorderThickness="2" HorizontalAlignment="Center">
                             <Border.Background>
                                 <ImageBrush ImageSource="{Binding SelectedTrack.CoverPath}" Stretch="UniformToFill" />
                             </Border.Background>
@@ -61,10 +74,10 @@
                             </Border.Effect>
                         </Border>
 
-                        <TextBlock Text="{Binding SelectedTrack.Title, TargetNullValue='Выберите трек'}" Foreground="{StaticResource ForegroundBrush}" FontSize="22" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap" Margin="0,24,0,6" />
+                        <TextBlock Text="{Binding SelectedTrack.Title, TargetNullValue='Выберите трек'}" Foreground="{StaticResource ForegroundBrush}" FontSize="21" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap" Margin="0,20,0,6" />
                         <TextBlock Text="{Binding SelectedTrack.Artist}" Foreground="{StaticResource MutedForegroundBrush}" FontSize="15" TextAlignment="Center" />
 
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,14,0,20">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,18">
                             <Border Background="#1AD4A574" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="12,5">
                                 <TextBlock Text="{Binding SelectedTrack.Genre}" Foreground="{StaticResource PrimaryBrush}" />
                             </Border>
