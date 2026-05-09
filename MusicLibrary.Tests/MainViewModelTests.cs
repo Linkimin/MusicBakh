@@ -129,6 +129,96 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void ChangingSelectedTrack_DoesNotStopPlayback()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        Track first = viewModel.DisplayedTracks[0];
+        Track second = viewModel.DisplayedTracks[1];
+
+        viewModel.SelectedTrack = first;
+        viewModel.PlayPauseCommand.Execute(null);
+        player.RaiseOpenedForTest();
+
+        Assert.True(viewModel.IsPlaying);
+
+        viewModel.SelectedTrack = second;
+
+        Assert.True(viewModel.IsPlaying);
+        Assert.Equal(first, viewModel.PlayingTrack);
+        Assert.False(viewModel.IsSelectedPlaying);
+        Assert.True(viewModel.ShowOtherPlayingBadge);
+    }
+
+    [Fact]
+    public void ChangingGenre_DoesNotStopPlayback()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        viewModel.SelectedTrack = viewModel.DisplayedTracks.First(t => t.Genre == "Рок");
+
+        viewModel.PlayPauseCommand.Execute(null);
+        player.RaiseOpenedForTest();
+        Assert.True(viewModel.IsPlaying);
+
+        viewModel.SelectedGenre = "Джаз";
+
+        Assert.True(viewModel.IsPlaying);
+        Assert.NotNull(viewModel.PlayingTrack);
+    }
+
+    [Fact]
+    public void PlayPauseCommand_ChangingTrack_StopsPreviousAndStartsNew()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        Track first = viewModel.DisplayedTracks[0];
+        Track second = viewModel.DisplayedTracks[1];
+
+        viewModel.SelectedTrack = first;
+        viewModel.PlayPauseCommand.Execute(null);
+        player.RaiseOpenedForTest();
+
+        viewModel.SelectedTrack = second;
+        viewModel.PlayPauseCommand.Execute(null);
+        player.RaiseOpenedForTest();
+
+        Assert.Equal(second, viewModel.PlayingTrack);
+        Assert.Equal(2, viewModel.PlaybackHistory.Count);
+        Assert.Equal(second, viewModel.PlaybackHistory[0].Track);
+        Assert.Equal(first, viewModel.PlaybackHistory[1].Track);
+    }
+
+    [Fact]
+    public void StopCommand_NotInvocable_WhenNothingIsPlaying()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
+
+        Assert.False(viewModel.StopCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void AddTrack_AddsToDisplayedAndIntroducesGenre()
+    {
+        var viewModel = CreateViewModel();
+        int beforeCount = viewModel.DisplayedTracks.Count;
+
+        var newTrack = new Track
+        {
+            Id = viewModel.GetNextTrackId(),
+            Title = "Imported",
+            Artist = "Tester",
+            Genre = "Фонк",
+            Duration = TimeSpan.FromSeconds(120),
+            FilePath = "imported.mp3"
+        };
+
+        viewModel.AddTrack(newTrack);
+
+        Assert.Contains(newTrack, viewModel.DisplayedTracks);
+        Assert.Equal(beforeCount + 1, viewModel.DisplayedTracks.Count);
+        Assert.Contains("Фонк", viewModel.Genres);
+    }
+
+    [Fact]
     public void MediaFailed_ResetsPlaybackStateAndDuration()
     {
         var (viewModel, player) = CreateViewModelWithPlayer();

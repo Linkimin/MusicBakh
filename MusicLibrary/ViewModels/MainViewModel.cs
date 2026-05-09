@@ -2,7 +2,9 @@ using MusicLibrary.Commands;
 using MusicLibrary.Models;
 using MusicLibrary.Services.Files;
 using MusicLibrary.Services.Playback;
+using MusicLibrary.Services.Storage;
 using MusicLibrary.Services.Tracks;
+using MusicLibrary.Views;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows.Input;
@@ -15,19 +17,22 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private const string AllGenres = "Все жанры";
     private const int MaxHistoryItems = 50;
 
-    private readonly IReadOnlyList<Track> _allTracks;
+    private readonly List<Track> _allTracks;
     private readonly IFileService _fileService;
     private readonly ISaveFileDialogService _saveFileDialogService;
     private readonly IAudioPlayerService _audioPlayerService;
+    private readonly IAddTrackDialogService? _addTrackDialogService;
+    private readonly IUserTrackStorage? _userTrackStorage;
+    private readonly IConfirmationService? _confirmationService;
     private readonly DispatcherTimer _progressTimer;
 
     private string _selectedGenre = AllGenres;
     private Track? _selectedTrack;
+    private Track? _playingTrack;
     private string _statusMessage = "Выберите трек для воспроизведения.";
     private OperationMessageKind _statusKind = OperationMessageKind.Info;
     private bool _isPlaying;
     private bool _isPaused;
-    private Track? _loadedTrack;
     private Track? _pendingHistoryTrack;
     private TimeSpan _currentPosition;
     private TimeSpan _currentDuration;
@@ -36,13 +41,19 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         ITrackRepository trackRepository,
         IFileService fileService,
         ISaveFileDialogService saveFileDialogService,
-        IAudioPlayerService audioPlayerService)
+        IAudioPlayerService audioPlayerService,
+        IAddTrackDialogService? addTrackDialogService = null,
+        IUserTrackStorage? userTrackStorage = null,
+        IConfirmationService? confirmationService = null)
     {
         _fileService = fileService;
         _saveFileDialogService = saveFileDialogService;
         _audioPlayerService = audioPlayerService;
+        _addTrackDialogService = addTrackDialogService;
+        _userTrackStorage = userTrackStorage;
+        _confirmationService = confirmationService;
 
-        _allTracks = trackRepository.GetTracks();
+        _allTracks = new List<Track>(trackRepository.GetTracks());
         DisplayedTracks = new ObservableCollection<Track>(_allTracks);
         PlaybackHistory = new ObservableCollection<PlaybackEntry>();
         Genres = new ObservableCollection<string>(
@@ -50,8 +61,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 .Concat(_allTracks.Select(track => track.Genre).Distinct().OrderBy(genre => genre)));
 
         PlayPauseCommand = new RelayCommand(_ => PlayOrPause(), _ => SelectedTrack is not null);
-        StopCommand = new RelayCommand(_ => Stop(), _ => SelectedTrack is not null);
+        StopCommand = new RelayCommand(_ => Stop(), _ => PlayingTrack is not null);
         SaveTrackCommand = new RelayCommand(_ => SaveSelectedTrack(), _ => SelectedTrack is not null);
+        AddTrackCommand = new RelayCommand(_ => OpenAddTrackDialog(), _ => _addTrackDialogService is not null && _userTrackStorage is not null);
+        DeleteTrackCommand = new RelayCommand(_ => DeleteSelectedTrack(), _ => CanDeleteSelected);
 
         _audioPlayerService.MediaOpened += (_, filePath) => HandleMediaOpened(filePath);
         _audioPlayerService.MediaEnded += (_, _) => HandleMediaEnded();
@@ -68,6 +81,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ICommand PlayPauseCommand { get; }
     public ICommand StopCommand { get; }
     public ICommand SaveTrackCommand { get; }
+    public ICommand AddTrackCommand { get; }
+    public ICommand DeleteTrackCommand { get; }
 
     public string SelectedGenre
     {
@@ -88,14 +103,60 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             if (SetProperty(ref _selectedTrack, value))
             {
-                Stop();
                 OnPropertyChanged(nameof(HasSelectedTrack));
+                OnPropertyChanged(nameof(IsSelectedPlaying));
+                OnPropertyChanged(nameof(PlayPauseText));
+                OnPropertyChanged(nameof(ShowOtherPlayingBadge));
+                OnPropertyChanged(nameof(OtherPlayingText));
+                OnPropertyChanged(nameof(CanDeleteSelected));
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+    }
+
+    public Track? PlayingTrack
+    {
+        get => _playingTrack;
+        private set
+        {
+            if (SetProperty(ref _playingTrack, value))
+            {
+                OnPropertyChanged(nameof(IsSelectedPlaying));
+                OnPropertyChanged(nameof(PlayPauseText));
+                OnPropertyChanged(nameof(ShowOtherPlayingBadge));
+                OnPropertyChanged(nameof(OtherPlayingText));
                 CommandManager.InvalidateRequerySuggested();
             }
         }
     }
 
     public bool HasSelectedTrack => SelectedTrack is not null;
+
+    public bool CanDeleteSelected =>
+        SelectedTrack is not null
+        && _userTrackStorage is not null
+        && IsUserTrack(SelectedTrack);
+
+    private bool IsUserTrack(Track track)
+    {
+        if (_userTrackStorage is null || string.IsNullOrEmpty(track.FilePath))
+        {
+            return false;
+        }
+        return track.FilePath.StartsWith(_userTrackStorage.MusicDirectory, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public bool IsSelectedPlaying =>
+        SelectedTrack is not null
+        && PlayingTrack is not null
+        && SelectedTrack.Id == PlayingTrack.Id;
+
+    public bool ShowOtherPlayingBadge =>
+        PlayingTrack is not null
+        && (SelectedTrack is null || SelectedTrack.Id != PlayingTrack.Id);
+
+    public string OtherPlayingText =>
+        PlayingTrack is null ? string.Empty : $"▶ играет: {PlayingTrack.Artist} — {PlayingTrack.Title}";
 
     public string StatusMessage
     {
@@ -121,7 +182,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
-    public string PlayPauseText => IsPlaying ? "Пауза" : "Воспроизвести";
+    public string PlayPauseText => IsSelectedPlaying && _isPlaying ? "Пауза" : "Воспроизвести";
 
     public TimeSpan CurrentPosition
     {
@@ -154,6 +215,111 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public double ProgressValue => CurrentPosition.TotalSeconds;
     public double ProgressMaximum => Math.Max(CurrentDuration.TotalSeconds, 1);
 
+    public int GetNextTrackId()
+    {
+        return _allTracks.Count == 0 ? 1 : _allTracks.Max(track => track.Id) + 1;
+    }
+
+    private void OpenAddTrackDialog()
+    {
+        if (_addTrackDialogService is null || _userTrackStorage is null)
+        {
+            return;
+        }
+
+        TrackImportCandidate? candidate = _addTrackDialogService.Show();
+        if (candidate is null)
+        {
+            return;
+        }
+
+        var track = new Track
+        {
+            Id = GetNextTrackId(),
+            Title = candidate.Title,
+            Artist = candidate.Artist,
+            Genre = candidate.Genre,
+            Duration = candidate.Duration,
+            FilePath = candidate.AudioFilePath,
+            CoverPath = candidate.CoverFilePath
+        };
+
+        _userTrackStorage.Append(UserTrack.FromTrack(track, DateTime.Now));
+        AddTrack(track);
+        SetStatus(OperationResult.Success($"Трек «{track.Title}» добавлен в библиотеку."));
+    }
+
+    private void DeleteSelectedTrack()
+    {
+        Track? track = SelectedTrack;
+        if (track is null || _userTrackStorage is null || !IsUserTrack(track))
+        {
+            return;
+        }
+
+        if (_confirmationService is not null)
+        {
+            bool confirmed = _confirmationService.Confirm(
+                "Удалить трек",
+                $"Удалить «{track.Artist} — {track.Title}» из библиотеки? Файл и обложка будут удалены безвозвратно.");
+            if (!confirmed)
+            {
+                return;
+            }
+        }
+
+        if (PlayingTrack is not null && PlayingTrack.Id == track.Id)
+        {
+            ResetPlaybackState();
+        }
+
+        _userTrackStorage.Delete(track.Id);
+        RemoveTrack(track);
+        SetStatus(OperationResult.Success($"Трек «{track.Title}» удален."));
+    }
+
+    private void RemoveTrack(Track track)
+    {
+        _allTracks.Remove(track);
+        DisplayedTracks.Remove(track);
+
+        // Если последний трек этого жанра ушёл — убираем жанр из фильтра.
+        if (!_allTracks.Any(t => t.Genre == track.Genre) && Genres.Contains(track.Genre))
+        {
+            Genres.Remove(track.Genre);
+            if (SelectedGenre == track.Genre)
+            {
+                SelectedGenre = AllGenres;
+            }
+        }
+
+        if (SelectedTrack == track)
+        {
+            SelectedTrack = null;
+        }
+    }
+
+    public void AddTrack(Track track)
+    {
+        _allTracks.Add(track);
+
+        if (!Genres.Contains(track.Genre))
+        {
+            // Жанры отсортированы по алфавиту, «Все жанры» всегда первый.
+            int insertIndex = 1;
+            while (insertIndex < Genres.Count && string.CompareOrdinal(Genres[insertIndex], track.Genre) < 0)
+            {
+                insertIndex++;
+            }
+            Genres.Insert(insertIndex, track.Genre);
+        }
+
+        if (SelectedGenre == AllGenres || SelectedGenre == track.Genre)
+        {
+            DisplayedTracks.Add(track);
+        }
+    }
+
     private void ApplyGenreFilter()
     {
         DisplayedTracks.Clear();
@@ -176,7 +342,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        if (IsPlaying)
+        if (IsSelectedPlaying && IsPlaying)
         {
             _audioPlayerService.Pause();
             _progressTimer.Stop();
@@ -192,18 +358,21 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        bool isResume = _isPaused && _loadedTrack?.Id == SelectedTrack.Id;
+        bool isResume = _isPaused && PlayingTrack is not null && PlayingTrack.Id == SelectedTrack.Id;
 
         if (!isResume)
         {
+            if (PlayingTrack is not null)
+            {
+                ResetPlaybackState();
+            }
+
             OperationResult openResult = _audioPlayerService.Open(SelectedTrack.FilePath);
             if (!openResult.IsSuccess)
             {
                 SetStatus(openResult);
                 return;
             }
-
-            _loadedTrack = SelectedTrack;
         }
 
         OperationResult playResult = _audioPlayerService.Play();
@@ -215,9 +384,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             _isPaused = false;
             _progressTimer.Start();
 
-            // Историю добавляем только после MediaOpened, потому что MediaPlayer сообщает ошибки асинхронно.
             if (!isResume)
             {
+                PlayingTrack = SelectedTrack;
                 _pendingHistoryTrack = SelectedTrack;
             }
         }
@@ -225,11 +394,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void Stop()
     {
+        ResetPlaybackState();
+        SetStatus(OperationResult.Info("Воспроизведение остановлено."));
+    }
+
+    private void ResetPlaybackState()
+    {
         _audioPlayerService.Stop();
         _progressTimer.Stop();
         IsPlaying = false;
         _isPaused = false;
-        _loadedTrack = null;
+        PlayingTrack = null;
         _pendingHistoryTrack = null;
         CurrentPosition = TimeSpan.Zero;
         CurrentDuration = TimeSpan.Zero;
@@ -277,7 +452,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void HandleMediaOpened(string filePath)
     {
-        if (_loadedTrack is null || !IsSamePath(_loadedTrack.FilePath, filePath))
+        if (PlayingTrack is null || !IsSamePath(PlayingTrack.FilePath, filePath))
         {
             return;
         }
@@ -307,25 +482,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void HandleMediaEnded()
     {
-        _progressTimer.Stop();
-        IsPlaying = false;
-        _isPaused = false;
-        _loadedTrack = null;
-        _pendingHistoryTrack = null;
-        CurrentPosition = TimeSpan.Zero;
-        CurrentDuration = TimeSpan.Zero;
+        ResetPlaybackState();
         SetStatus(OperationResult.Info("Воспроизведение завершено."));
     }
 
     private void HandleMediaFailed(string message)
     {
-        _progressTimer.Stop();
-        IsPlaying = false;
-        _isPaused = false;
-        _loadedTrack = null;
-        _pendingHistoryTrack = null;
-        CurrentPosition = TimeSpan.Zero;
-        CurrentDuration = TimeSpan.Zero;
+        ResetPlaybackState();
         SetStatus(OperationResult.Error($"Ошибка воспроизведения: {message}"));
     }
 

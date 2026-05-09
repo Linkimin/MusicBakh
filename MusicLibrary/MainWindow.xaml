@@ -15,15 +15,15 @@
         </Grid.RowDefinitions>
 
         <Border Background="{StaticResource CardOverlayBrush}" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,0,1" Padding="32,22">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Border Width="52" Height="52" CornerRadius="14" Background="{StaticResource GoldGradientBrush}">
-                    <TextBlock Text="♪" FontSize="28" FontWeight="Bold" Foreground="{StaticResource BackgroundBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                </Border>
-                <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="Музыкальная Библиотека" FontFamily="{StaticResource HeadingFont}" Foreground="{StaticResource PrimaryBrush}" FontSize="26" FontWeight="SemiBold" />
-                    <TextBlock Text="Премиальная коллекция" Foreground="{StaticResource MutedForegroundBrush}" FontSize="14" />
+            <DockPanel VerticalAlignment="Center">
+                <Button DockPanel.Dock="Right" Content="＋ Добавить трек" Command="{Binding AddTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" Height="44" Padding="18,0" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="52" Height="52" CornerRadius="14" Background="{StaticResource GoldGradientBrush}">
+                        <TextBlock Text="♪" FontSize="28" FontWeight="Bold" Foreground="{StaticResource BackgroundBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" Text="Музыкальная Библиотека" FontFamily="{StaticResource HeadingFont}" Foreground="{StaticResource PrimaryBrush}" FontSize="26" FontWeight="SemiBold" />
                 </StackPanel>
-            </StackPanel>
+            </DockPanel>
         </Border>
 
         <Grid Grid.Row="1">
@@ -50,7 +50,7 @@
             </Border>
 
             <Border Grid.Column="1" Background="#3316161F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,1,0" Padding="28">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
                     <StackPanel VerticalAlignment="Center">
                         <Border Width="196" Height="196" CornerRadius="18" BorderBrush="{StaticResource PrimaryBrush}" BorderThickness="2" HorizontalAlignment="Center">
                             <Border.Background>
@@ -71,15 +71,23 @@
                             <TextBlock Text="{Binding SelectedTrack.DurationText}" Foreground="{StaticResource MutedForegroundBrush}" Margin="12,5,0,0" />
                         </StackPanel>
 
-                        <ProgressBar Minimum="0" Maximum="{Binding ProgressMaximum, Mode=OneWay}" Value="{Binding ProgressValue, Mode=OneWay}" Height="8" Foreground="{StaticResource PrimaryBrush}" Background="{StaticResource AccentBrush}" Margin="0,0,0,8" />
-                        <DockPanel Margin="0,0,0,18">
-                            <TextBlock Text="{Binding CurrentPositionText}" Foreground="{StaticResource MutedForegroundBrush}" DockPanel.Dock="Left" />
-                            <TextBlock Text="{Binding CurrentDurationText}" Foreground="{StaticResource MutedForegroundBrush}" HorizontalAlignment="Right" />
-                        </DockPanel>
+                        <StackPanel Visibility="{Binding IsSelectedPlaying, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ProgressBar Minimum="0" Maximum="{Binding ProgressMaximum, Mode=OneWay}" Value="{Binding ProgressValue, Mode=OneWay}" Height="8" Foreground="{StaticResource PrimaryBrush}" Background="{StaticResource AccentBrush}" Margin="0,0,0,8" />
+                            <DockPanel Margin="0,0,0,18">
+                                <TextBlock Text="{Binding CurrentPositionText}" Foreground="{StaticResource MutedForegroundBrush}" DockPanel.Dock="Left" />
+                                <TextBlock Text="{Binding CurrentDurationText}" Foreground="{StaticResource MutedForegroundBrush}" HorizontalAlignment="Right" />
+                            </DockPanel>
+                        </StackPanel>
+
+                        <Border Visibility="{Binding ShowOtherPlayingBadge, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                Background="#1AD4A574" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12,8" Margin="0,0,0,18">
+                            <TextBlock Text="{Binding OtherPlayingText}" Foreground="{StaticResource PrimaryBrush}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                        </Border>
 
                         <Button Content="{Binding PlayPauseText}" Command="{Binding PlayPauseCommand}" Style="{StaticResource PrimaryButtonStyle}" Margin="0,0,0,10" />
                         <Button Content="Стоп" Command="{Binding StopCommand}" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,0,10" />
-                        <Button Content="Сохранить" Command="{Binding SaveTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" />
+                        <Button Content="Сохранить" Command="{Binding SaveTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,0,10" />
+                        <Button Content="Удалить трек" Command="{Binding DeleteTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" Foreground="{StaticResource ErrorBrush}" Visibility="{Binding CanDeleteSelected, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
                         <TextBlock Text="{Binding StatusMessage}"
                                    Foreground="{Binding StatusKind, Converter={StaticResource StatusKindToBrushConverter}}"

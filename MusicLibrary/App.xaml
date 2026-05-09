@@ -21,6 +21,8 @@
                                                    InfoBrush="{StaticResource MutedForegroundBrush}"
                                                    SuccessBrush="{StaticResource SuccessBrush}"
                                                    ErrorBrush="{StaticResource ErrorBrush}" />
+
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>
