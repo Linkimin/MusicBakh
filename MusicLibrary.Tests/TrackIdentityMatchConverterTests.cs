@@ -1,6 +1,8 @@
 using MusicLibrary.Converters;
 using MusicLibrary.Models;
 using System.Globalization;
+using System.Windows;
+using System.Windows.Data;
 
 namespace MusicLibrary.Tests;
 
@@ -53,6 +55,21 @@ public sealed class TrackIdentityMatchConverterTests
         Assert.False((bool)result);
     }
 
+    [Theory]
+    [MemberData(nameof(InvalidBindingValues))]
+    public void Convert_ReturnsFalse_ForInvalidBindingValues(object[] values)
+    {
+        var converter = new TrackIdentityMatchConverter();
+
+        object result = converter.Convert(
+            values,
+            typeof(bool),
+            parameter: null!,
+            CultureInfo.InvariantCulture);
+
+        Assert.False((bool)result);
+    }
+
     [Fact]
     public void ConvertBack_ThrowsNotSupportedException()
     {
@@ -63,5 +80,22 @@ public sealed class TrackIdentityMatchConverterTests
             new[] { typeof(Track), typeof(Track) },
             parameter: null!,
             CultureInfo.InvariantCulture));
+    }
+
+    public static TheoryData<object[]> InvalidBindingValues()
+    {
+        var track = new Track { Id = 7, Title = "A", Artist = "B", Genre = "Рок", FilePath = "a.mp3" };
+
+        return new TheoryData<object[]>
+        {
+            Array.Empty<object>(),
+            new object[] { track },
+            new object[] { DependencyProperty.UnsetValue, track },
+            new object[] { track, DependencyProperty.UnsetValue },
+            new object[] { Binding.DoNothing, track },
+            new object[] { track, Binding.DoNothing },
+            new object[] { "not a track", track },
+            new object[] { track, "not a track" }
+        };
     }
 }
