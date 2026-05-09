@@ -21,6 +21,7 @@
                                                    InfoBrush="{StaticResource MutedForegroundBrush}"
                                                    SuccessBrush="{StaticResource SuccessBrush}"
                                                    ErrorBrush="{StaticResource ErrorBrush}" />
+            <converters:TrackIdentityMatchConverter x:Key="TrackIdentityMatchConverter" />
 
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         </ResourceDictionary>
