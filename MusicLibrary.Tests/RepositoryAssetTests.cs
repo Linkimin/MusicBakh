@@ -30,6 +30,19 @@ public sealed class RepositoryAssetTests
     }
 
     [Fact]
+    public void Repository_CoverFilesExist()
+    {
+        var repository = new InMemoryTrackRepository();
+
+        var missingCovers = repository.GetTracks()
+            .Where(track => !File.Exists(track.CoverPath))
+            .Select(track => track.CoverPath)
+            .ToList();
+
+        Assert.Empty(missingCovers);
+    }
+
+    [Fact]
     public void Repository_DurationsAreFactualAndNonZero()
     {
         var repository = new InMemoryTrackRepository();
