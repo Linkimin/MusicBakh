@@ -340,18 +340,18 @@ The redundant `Save` after step 7 is acceptable: the file is small and infrequen
 │        ⏮    ⏪    ▶    ⏩    ⏭                  │  transport row
 │              (Play/Pause larger)               │
 │                                                │
-│  🔊 ──●──── 70%   🔇    ⏹    🔁 Off            │  utility row
+│  🔊 ──●──── 70%       🔇          🔁 Off       │  utility row
 │                                                │
 │   [ Сохранить копию ]   [ Удалить ]           │  existing
 │   статус-строка                                │  existing
 └────────────────────────────────────────────────┘
 ```
 
-The cover, title, status, Save, and Delete elements keep their existing position and styling. The new seek/transport/utility blocks are inserted between metadata and Save. The legacy text-button "Воспроизвести"/"Пауза" is replaced by the icon-based Play/Pause in the transport row. The existing Stop button is restyled as an `IconStop` button and moved to the utility row, between the mute icon and the repeat toggle — keeping the command reachable without dominating the transport row. Layout updated:
+The cover, title, status, Save, and Delete elements keep their existing position and styling. The new seek/transport/utility blocks are inserted between metadata and Save. The legacy text-button "Воспроизвести"/"Пауза" is replaced by the icon-based Play/Pause toggle in the transport row.
 
-```
-🔊 ──●──── 70%   🔇    ⏹    🔁 Off
-```
+The standalone Stop button is **removed from the UI entirely**, matching modern player conventions (Spotify, YouTube Music, Apple Music — none of which expose a separate Stop button). `StopCommand` itself is preserved as `ICommand` because the ViewModel still calls `Stop()` internally during track deletion and `MediaFailed` recovery, but it is no longer bound to any visual control.
+
+Play/Pause is a single Button. Its `Content` swaps between `IconPlay` (when not playing) and `IconPause` (when playing) via a `DataTrigger` on `IsSelectedPlaying && IsPlaying`. A click toggles via `PlayPauseCommand` — pause preserves position, the next click resumes from that position.
 
 ### Icons (Path geometry, in `PlayerIcons.xaml`)
 
@@ -368,7 +368,6 @@ The cover, title, status, Save, and Delete elements keep their existing position
 | `IconRepeatOff` | Grey circular arrow | Path in `MutedForegroundBrush` |
 | `IconRepeatCurrent` | Gold arrow with "1" | Path + a TextBlock "1" centered |
 | `IconRepeatLibrary` | Full gold circular arrow | Path in `PrimaryBrush` |
-| `IconStop` | Filled square | `M 0,0 H 12 V 12 H 0 Z` in `PrimaryBrush` |
 
 Exact path coordinates are encoded in the implementation plan, not here.
 
