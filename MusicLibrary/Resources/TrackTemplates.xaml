@@ -8,8 +8,10 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="14" />
                 </Grid.ColumnDefinitions>
-                <Border Width="64" Height="64" CornerRadius="10" Background="{StaticResource SecondaryBrush}" ClipToBounds="True">
-                    <Image Source="{Binding CoverPath}" Stretch="UniformToFill" />
+                <Border Width="64" Height="64" CornerRadius="10">
+                    <Border.Background>
+                        <ImageBrush ImageSource="{Binding CoverPath}" Stretch="UniformToFill" />
+                    </Border.Background>
                 </Border>
                 <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Title}" Foreground="{StaticResource ForegroundBrush}" FontWeight="SemiBold" FontSize="16" TextTrimming="CharacterEllipsis" />
@@ -41,8 +43,10 @@
                     <ColumnDefinition Width="48" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Border Width="48" Height="48" CornerRadius="8" ClipToBounds="True" Background="{StaticResource SecondaryBrush}">
-                    <Image Source="{Binding Track.CoverPath}" Stretch="UniformToFill" />
+                <Border Width="48" Height="48" CornerRadius="8">
+                    <Border.Background>
+                        <ImageBrush ImageSource="{Binding Track.CoverPath}" Stretch="UniformToFill" />
+                    </Border.Background>
                 </Border>
                 <StackPanel Grid.Column="1" Margin="10,0,0,0">
                     <TextBlock Text="{Binding Track.Title}" Foreground="{StaticResource ForegroundBrush}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />

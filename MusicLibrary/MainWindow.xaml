@@ -52,11 +52,13 @@
             <Border Grid.Column="1" Background="#3316161F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,1,0" Padding="28">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel VerticalAlignment="Center">
-                        <Border Width="196" Height="196" CornerRadius="18" Background="{StaticResource AccentBrush}" BorderBrush="{StaticResource PrimaryBrush}" BorderThickness="2" HorizontalAlignment="Center">
+                        <Border Width="196" Height="196" CornerRadius="18" BorderBrush="{StaticResource PrimaryBrush}" BorderThickness="2" HorizontalAlignment="Center">
+                            <Border.Background>
+                                <ImageBrush ImageSource="{Binding SelectedTrack.CoverPath}" Stretch="UniformToFill" />
+                            </Border.Background>
                             <Border.Effect>
                                 <DropShadowEffect Color="#D4A574" BlurRadius="35" ShadowDepth="0" Opacity="0.22" />
                             </Border.Effect>
-                            <Image Source="{Binding SelectedTrack.CoverPath}" Stretch="UniformToFill" />
                         </Border>
 
                         <TextBlock Text="{Binding SelectedTrack.Title, TargetNullValue='Выберите трек'}" Foreground="{StaticResource ForegroundBrush}" FontSize="22" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap" Margin="0,24,0,6" />

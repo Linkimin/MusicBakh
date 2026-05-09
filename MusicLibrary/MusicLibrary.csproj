@@ -12,6 +12,7 @@
   <ItemGroup>
     <None Update="Music\**\*" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Covers\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Covers\.gitkeep" CopyToOutputDirectory="Never" />
   </ItemGroup>
 
 </Project>
