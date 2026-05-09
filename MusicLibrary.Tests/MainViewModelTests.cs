@@ -30,12 +30,24 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
-    public void PlayPauseCommand_AddsHistory_WhenPlaybackStarts()
+    public void PlayPauseCommand_DoesNotAddHistory_BeforeMediaOpened()
     {
         var viewModel = CreateViewModel();
         viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
 
         viewModel.PlayPauseCommand.Execute(null);
+
+        Assert.Empty(viewModel.PlaybackHistory);
+    }
+
+    [Fact]
+    public void MediaOpened_AddsHistoryForPendingTrack()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
+
+        viewModel.PlayPauseCommand.Execute(null);
+        player.RaiseOpenedForTest();
 
         Assert.Single(viewModel.PlaybackHistory);
         Assert.Equal(viewModel.SelectedTrack, viewModel.PlaybackHistory[0].Track);
@@ -44,10 +56,11 @@ public sealed class MainViewModelTests
     [Fact]
     public void PlayPauseCommand_DoesNotDuplicateHistory_WhenResumingAfterPause()
     {
-        var viewModel = CreateViewModel();
+        var (viewModel, player) = CreateViewModelWithPlayer();
         viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
 
         viewModel.PlayPauseCommand.Execute(null);
+        player.RaiseOpenedForTest();
         viewModel.PlayPauseCommand.Execute(null);
         viewModel.PlayPauseCommand.Execute(null);
 
@@ -129,7 +142,6 @@ public sealed class MainViewModelTests
 
         public OperationResult Open(string filePath)
         {
-            MediaOpened?.Invoke(this, EventArgs.Empty);
             return OperationResult.Success("opened");
         }
 
@@ -152,6 +164,7 @@ public sealed class MainViewModelTests
         }
 
         public void RaiseEndedForTest() => MediaEnded?.Invoke(this, EventArgs.Empty);
+        public void RaiseOpenedForTest() => MediaOpened?.Invoke(this, EventArgs.Empty);
         public void RaiseFailedForTest(string message) => MediaFailed?.Invoke(this, message);
     }
 }

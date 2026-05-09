@@ -27,6 +27,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private bool _isPlaying;
     private bool _isPaused;
     private Track? _loadedTrack;
+    private Track? _pendingHistoryTrack;
     private TimeSpan _currentPosition;
     private TimeSpan _currentDuration;
 
@@ -51,7 +52,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         StopCommand = new RelayCommand(_ => Stop(), _ => SelectedTrack is not null);
         SaveTrackCommand = new RelayCommand(_ => SaveSelectedTrack(), _ => SelectedTrack is not null);
 
-        _audioPlayerService.MediaOpened += (_, _) => RefreshDuration();
+        _audioPlayerService.MediaOpened += (_, _) => HandleMediaOpened();
         _audioPlayerService.MediaEnded += (_, _) => HandleMediaEnded();
         _audioPlayerService.MediaFailed += (_, message) => HandleMediaFailed(message);
 
@@ -213,10 +214,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             _isPaused = false;
             _progressTimer.Start();
 
-            // История фиксирует новый запуск трека, но не дублирует простое продолжение после паузы.
+            // Историю добавляем только после MediaOpened, потому что MediaPlayer сообщает ошибки асинхронно.
             if (!isResume)
             {
-                AddToHistory(SelectedTrack);
+                _pendingHistoryTrack = SelectedTrack;
             }
         }
     }
@@ -228,6 +229,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         IsPlaying = false;
         _isPaused = false;
         _loadedTrack = null;
+        _pendingHistoryTrack = null;
         CurrentPosition = TimeSpan.Zero;
         CurrentDuration = TimeSpan.Zero;
     }
@@ -272,6 +274,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         CurrentDuration = _audioPlayerService.Duration;
     }
 
+    private void HandleMediaOpened()
+    {
+        RefreshDuration();
+
+        if (_pendingHistoryTrack is not null)
+        {
+            AddToHistory(_pendingHistoryTrack);
+            _pendingHistoryTrack = null;
+        }
+    }
+
     private void RefreshProgress()
     {
         CurrentPosition = _audioPlayerService.Position;
@@ -283,6 +296,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         IsPlaying = false;
         _isPaused = false;
         _loadedTrack = null;
+        _pendingHistoryTrack = null;
         CurrentPosition = TimeSpan.Zero;
         CurrentDuration = TimeSpan.Zero;
         SetStatus(OperationResult.Info("Воспроизведение завершено."));
@@ -294,6 +308,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         IsPlaying = false;
         _isPaused = false;
         _loadedTrack = null;
+        _pendingHistoryTrack = null;
         CurrentPosition = TimeSpan.Zero;
         CurrentDuration = TimeSpan.Zero;
         SetStatus(OperationResult.Error($"Ошибка воспроизведения: {message}"));
