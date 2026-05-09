@@ -201,6 +201,41 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void PlayTrackCommand_DoesNotAddHistory_BeforeMediaOpened()
+    {
+        var (viewModel, _) = CreateViewModelWithPlayer();
+        Track second = viewModel.DisplayedTracks[1];
+
+        viewModel.PlayTrackCommand.Execute(second);
+
+        Assert.Empty(viewModel.PlaybackHistory);
+    }
+
+    [Fact]
+    public void PlayTrackCommand_DoesNotRestartSameAlreadyPlayingTrack()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        Track second = viewModel.DisplayedTracks[1];
+
+        viewModel.PlayTrackCommand.Execute(second);
+        player.RaiseOpenedForTest();
+
+        Assert.Single(viewModel.PlaybackHistory);
+
+        viewModel.PlayTrackCommand.Execute(second);
+
+        Assert.Equal(second, viewModel.SelectedTrack);
+        Assert.Equal(second, viewModel.PlayingTrack);
+        Assert.True(viewModel.IsPlaying);
+        Assert.Equal(1, player.OpenCount);
+        Assert.Equal(1, player.PlayCount);
+
+        player.RaiseOpenedForTest();
+
+        Assert.Single(viewModel.PlaybackHistory);
+    }
+
+    [Fact]
     public void PlayTrackCommand_IgnoresNonTrackParameter()
     {
         var (viewModel, player) = CreateViewModelWithPlayer();
@@ -211,6 +246,26 @@ public sealed class MainViewModelTests
         Assert.Null(viewModel.PlayingTrack);
         Assert.False(viewModel.IsPlaying);
         Assert.Null(player.LastOpenedFilePath);
+    }
+
+    [Fact]
+    public void PlayTrackCommand_MissingFile_DoesNotSetPlayingTrack()
+    {
+        Track[] tracks =
+        [
+            new Track { Id = 1, Title = "Missing", Artist = "Band", Genre = "Рок", Duration = TimeSpan.FromSeconds(100), FilePath = "missing.mp3" }
+        ];
+        var player = new FakeAudioPlayerService();
+        var viewModel = CreateViewModel(tracks, player, new FakeFileService("missing.mp3"));
+
+        viewModel.PlayTrackCommand.Execute(viewModel.DisplayedTracks[0]);
+
+        Assert.Equal(viewModel.DisplayedTracks[0], viewModel.SelectedTrack);
+        Assert.Null(viewModel.PlayingTrack);
+        Assert.False(viewModel.IsPlaying);
+        Assert.Null(player.LastOpenedFilePath);
+        Assert.Empty(viewModel.PlaybackHistory);
+        Assert.Contains("Файл не найден", viewModel.StatusMessage);
     }
 
     [Fact]
@@ -227,6 +282,20 @@ public sealed class MainViewModelTests
         Assert.Equal(second, viewModel.PlayingTrack);
         Assert.True(viewModel.IsPlaying);
         Assert.Equal(second.FilePath, player.LastOpenedFilePath);
+    }
+
+    [Fact]
+    public void ReplayHistoryEntryCommand_DoesNotAddHistory_BeforeMediaOpened()
+    {
+        var (viewModel, _) = CreateViewModelWithPlayer();
+        Track second = viewModel.DisplayedTracks[1];
+        var entry = new PlaybackEntry { Track = second, PlayedAt = DateTime.Now };
+        viewModel.PlaybackHistory.Add(entry);
+
+        viewModel.ReplayHistoryEntryCommand.Execute(entry);
+
+        Assert.Single(viewModel.PlaybackHistory);
+        Assert.Equal(entry, viewModel.PlaybackHistory[0]);
     }
 
     [Fact]
@@ -282,6 +351,18 @@ public sealed class MainViewModelTests
         return CreateViewModelWithPlayer().ViewModel;
     }
 
+    private static MainViewModel CreateViewModel(
+        IReadOnlyList<Track> tracks,
+        FakeAudioPlayerService player,
+        FakeFileService fileService)
+    {
+        return new MainViewModel(
+            new FakeTrackRepository(tracks),
+            fileService,
+            new FakeSaveFileDialogService(),
+            player);
+    }
+
     private static (MainViewModel ViewModel, FakeAudioPlayerService Player) CreateViewModelWithPlayer()
     {
         var tracks = new[]
@@ -291,11 +372,7 @@ public sealed class MainViewModelTests
         };
 
         var player = new FakeAudioPlayerService();
-        var viewModel = new MainViewModel(
-            new FakeTrackRepository(tracks),
-            new FakeFileService(),
-            new FakeSaveFileDialogService(),
-            player);
+        var viewModel = CreateViewModel(tracks, player, new FakeFileService());
 
         return (viewModel, player);
     }
@@ -314,7 +391,14 @@ public sealed class MainViewModelTests
 
     private sealed class FakeFileService : IFileService
     {
-        public bool Exists(string path) => true;
+        private readonly HashSet<string> _missingPaths;
+
+        public FakeFileService(params string[] missingPaths)
+        {
+            _missingPaths = new HashSet<string>(missingPaths, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public bool Exists(string path) => !_missingPaths.Contains(path);
         public OperationResult Copy(string sourcePath, string targetPath, bool overwrite) => OperationResult.Success("saved");
         public string GetFileName(string path) => Path.GetFileName(path) ?? "track.mp3";
     }
@@ -334,15 +418,19 @@ public sealed class MainViewModelTests
         public TimeSpan Position { get; set; }
         public TimeSpan Duration { get; } = TimeSpan.FromSeconds(100);
         public string? LastOpenedFilePath { get; private set; }
+        public int OpenCount { get; private set; }
+        public int PlayCount { get; private set; }
 
         public OperationResult Open(string filePath)
         {
+            OpenCount++;
             LastOpenedFilePath = filePath;
             return OperationResult.Success("opened");
         }
 
         public OperationResult Play()
         {
+            PlayCount++;
             IsPlaying = true;
             return OperationResult.Success("playing");
         }

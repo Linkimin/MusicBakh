@@ -371,6 +371,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
 
         SelectedTrack = track;
+        if (PlayingTrack is not null && PlayingTrack.Id == track.Id && IsPlaying)
+        {
+            SetStatus(OperationResult.Info("Этот трек уже воспроизводится."));
+            return;
+        }
+
         StartOrResumeTrack(track);
     }
 
