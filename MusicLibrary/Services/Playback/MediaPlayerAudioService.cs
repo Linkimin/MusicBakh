@@ -9,25 +9,62 @@ namespace MusicLibrary.Services.Playback;
 /// </summary>
 public sealed class MediaPlayerAudioService : IAudioPlayerService
 {
-    private readonly MediaPlayer _player = new();
+    private MediaPlayer _player;
+    private string? _currentFilePath;
     private bool _isDisposed;
 
     public MediaPlayerAudioService()
     {
-        _player.MediaOpened += (_, _) => MediaOpened?.Invoke(this, EventArgs.Empty);
-        _player.MediaEnded += (_, _) =>
-        {
-            IsPlaying = false;
-            MediaEnded?.Invoke(this, EventArgs.Empty);
-        };
-        _player.MediaFailed += (_, args) =>
-        {
-            IsPlaying = false;
-            MediaFailed?.Invoke(this, args.ErrorException.Message);
-        };
+        _player = CreatePlayer(filePath: null);
     }
 
-    public event EventHandler? MediaOpened;
+    private MediaPlayer CreatePlayer(string? filePath)
+    {
+        var player = new MediaPlayer();
+
+        player.MediaOpened += (_, _) =>
+        {
+            if (IsCurrentPlayer(player, filePath))
+            {
+                MediaOpened?.Invoke(this, filePath!);
+            }
+        };
+
+        player.MediaEnded += (_, _) =>
+        {
+            if (!ReferenceEquals(player, _player))
+            {
+                return;
+            }
+
+            IsPlaying = false;
+            _currentFilePath = null;
+            MediaEnded?.Invoke(this, EventArgs.Empty);
+        };
+
+        player.MediaFailed += (_, args) =>
+        {
+            if (!ReferenceEquals(player, _player))
+            {
+                return;
+            }
+
+            IsPlaying = false;
+            _currentFilePath = null;
+            MediaFailed?.Invoke(this, args.ErrorException.Message);
+        };
+
+        return player;
+    }
+
+    private bool IsCurrentPlayer(MediaPlayer player, string? filePath)
+    {
+        return ReferenceEquals(player, _player)
+            && filePath is not null
+            && string.Equals(_currentFilePath, filePath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public event EventHandler<string>? MediaOpened;
     public event EventHandler? MediaEnded;
     public event EventHandler<string>? MediaFailed;
 
@@ -56,12 +93,16 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
     {
         try
         {
+            _player.Close();
+            _player = CreatePlayer(filePath);
+            _currentFilePath = filePath;
             _player.Open(new Uri(filePath, UriKind.Absolute));
             return OperationResult.Success("Трек подготовлен к воспроизведению.");
         }
         catch (Exception exception) when (exception is UriFormatException or InvalidOperationException)
         {
             IsPlaying = false;
+            _currentFilePath = null;
             return OperationResult.Error($"Не удалось открыть аудиофайл: {exception.Message}");
         }
     }
@@ -92,6 +133,7 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
         _player.Stop();
         _player.Position = TimeSpan.Zero;
         IsPlaying = false;
+        _currentFilePath = null;
     }
 
     public void Dispose()
@@ -102,6 +144,7 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
         }
 
         _player.Close();
+        _currentFilePath = null;
         _isDisposed = true;
     }
 }

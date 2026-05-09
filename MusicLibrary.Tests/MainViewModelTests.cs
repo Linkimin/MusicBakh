@@ -54,6 +54,67 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void MediaOpened_IgnoresStaleTrackOpenEvent()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        Track firstTrack = viewModel.DisplayedTracks[0];
+        Track secondTrack = viewModel.DisplayedTracks[1];
+
+        viewModel.SelectedTrack = firstTrack;
+        viewModel.PlayPauseCommand.Execute(null);
+        viewModel.SelectedTrack = secondTrack;
+        viewModel.PlayPauseCommand.Execute(null);
+        player.RaiseOpenedForTest(firstTrack.FilePath);
+
+        Assert.Empty(viewModel.PlaybackHistory);
+
+        player.RaiseOpenedForTest(secondTrack.FilePath);
+
+        Assert.Single(viewModel.PlaybackHistory);
+        Assert.Equal(secondTrack, viewModel.PlaybackHistory[0].Track);
+    }
+
+    [Fact]
+    public void MediaFailed_DoesNotAddPendingHistory()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
+
+        viewModel.PlayPauseCommand.Execute(null);
+        player.RaiseFailedForTest("unsupported format");
+        player.RaiseOpenedForTest(viewModel.SelectedTrack.FilePath);
+
+        Assert.Empty(viewModel.PlaybackHistory);
+    }
+
+    [Fact]
+    public void StopCommand_ClearsPendingHistory()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
+        Track selectedTrack = viewModel.SelectedTrack!;
+
+        viewModel.PlayPauseCommand.Execute(null);
+        viewModel.StopCommand.Execute(null);
+        player.RaiseOpenedForTest(selectedTrack.FilePath);
+
+        Assert.Empty(viewModel.PlaybackHistory);
+    }
+
+    [Fact]
+    public void MediaOpened_DoesNotDuplicateHistory_WhenRaisedTwice()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
+
+        viewModel.PlayPauseCommand.Execute(null);
+        player.RaiseOpenedForTest();
+        player.RaiseOpenedForTest();
+
+        Assert.Single(viewModel.PlaybackHistory);
+    }
+
+    [Fact]
     public void PlayPauseCommand_DoesNotDuplicateHistory_WhenResumingAfterPause()
     {
         var (viewModel, player) = CreateViewModelWithPlayer();
@@ -132,16 +193,18 @@ public sealed class MainViewModelTests
 
     private sealed class FakeAudioPlayerService : IAudioPlayerService
     {
-        public event EventHandler? MediaOpened;
+        public event EventHandler<string>? MediaOpened;
         public event EventHandler? MediaEnded;
         public event EventHandler<string>? MediaFailed;
 
         public bool IsPlaying { get; private set; }
         public TimeSpan Position { get; set; }
         public TimeSpan Duration { get; } = TimeSpan.FromSeconds(100);
+        public string? LastOpenedFilePath { get; private set; }
 
         public OperationResult Open(string filePath)
         {
+            LastOpenedFilePath = filePath;
             return OperationResult.Success("opened");
         }
 
@@ -164,7 +227,8 @@ public sealed class MainViewModelTests
         }
 
         public void RaiseEndedForTest() => MediaEnded?.Invoke(this, EventArgs.Empty);
-        public void RaiseOpenedForTest() => MediaOpened?.Invoke(this, EventArgs.Empty);
+        public void RaiseOpenedForTest() => RaiseOpenedForTest(LastOpenedFilePath ?? string.Empty);
+        public void RaiseOpenedForTest(string filePath) => MediaOpened?.Invoke(this, filePath);
         public void RaiseFailedForTest(string message) => MediaFailed?.Invoke(this, message);
     }
 }

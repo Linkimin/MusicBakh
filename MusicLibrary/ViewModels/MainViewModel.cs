@@ -4,6 +4,7 @@ using MusicLibrary.Services.Files;
 using MusicLibrary.Services.Playback;
 using MusicLibrary.Services.Tracks;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows.Input;
 using System.Windows.Threading;
 
@@ -52,7 +53,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         StopCommand = new RelayCommand(_ => Stop(), _ => SelectedTrack is not null);
         SaveTrackCommand = new RelayCommand(_ => SaveSelectedTrack(), _ => SelectedTrack is not null);
 
-        _audioPlayerService.MediaOpened += (_, _) => HandleMediaOpened();
+        _audioPlayerService.MediaOpened += (_, filePath) => HandleMediaOpened(filePath);
         _audioPlayerService.MediaEnded += (_, _) => HandleMediaEnded();
         _audioPlayerService.MediaFailed += (_, message) => HandleMediaFailed(message);
 
@@ -274,15 +275,29 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         CurrentDuration = _audioPlayerService.Duration;
     }
 
-    private void HandleMediaOpened()
+    private void HandleMediaOpened(string filePath)
     {
+        if (_loadedTrack is null || !IsSamePath(_loadedTrack.FilePath, filePath))
+        {
+            return;
+        }
+
         RefreshDuration();
 
-        if (_pendingHistoryTrack is not null)
+        if (_pendingHistoryTrack is not null && IsSamePath(_pendingHistoryTrack.FilePath, filePath))
         {
             AddToHistory(_pendingHistoryTrack);
             _pendingHistoryTrack = null;
         }
+    }
+
+    private static bool IsSamePath(string expectedPath, string actualPath)
+    {
+        // MediaOpened приходит асинхронно, поэтому сверяем путь и отбрасываем устаревшие события.
+        return string.Equals(
+            Path.GetFullPath(expectedPath),
+            Path.GetFullPath(actualPath),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private void RefreshProgress()

@@ -4,7 +4,7 @@ namespace MusicLibrary.Services.Playback;
 
 public interface IAudioPlayerService : IDisposable
 {
-    event EventHandler? MediaOpened;
+    event EventHandler<string>? MediaOpened;
     event EventHandler? MediaEnded;
     event EventHandler<string>? MediaFailed;
 
