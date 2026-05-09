@@ -1,12 +1,17 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <DataTemplate x:Key="TrackCardTemplate">
-        <Border x:Name="CardRoot" Padding="14" CornerRadius="12" Background="{StaticResource AccentBrush}" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1">
+        <Border x:Name="CardRoot" Padding="14" CornerRadius="12" Background="{StaticResource AccentBrush}" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" Cursor="Hand">
+            <Border.InputBindings>
+                <MouseBinding MouseAction="LeftDoubleClick"
+                              Command="{Binding DataContext.PlayTrackCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                              CommandParameter="{Binding}" />
+            </Border.InputBindings>
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="64" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="14" />
+                    <ColumnDefinition Width="22" />
                 </Grid.ColumnDefinitions>
                 <Border Width="64" Height="64" CornerRadius="10">
                     <Border.Background>
@@ -23,7 +28,14 @@
                         <TextBlock Text="{Binding DurationText}" Foreground="{StaticResource MutedForegroundBrush}" FontSize="12" Margin="10,3,0,0" />
                     </StackPanel>
                 </StackPanel>
-                <Ellipse x:Name="SelectedDot" Grid.Column="2" Width="8" Height="8" Fill="{StaticResource PrimaryBrush}" Visibility="Collapsed" VerticalAlignment="Top" HorizontalAlignment="Right" />
+                <Grid Grid.Column="2" Width="18" HorizontalAlignment="Right" VerticalAlignment="Top">
+                    <Ellipse x:Name="SelectedDot" Width="8" Height="8" Fill="{StaticResource PrimaryBrush}" Visibility="Collapsed" HorizontalAlignment="Right" />
+                    <StackPanel x:Name="PlayingBars" Orientation="Horizontal" Visibility="Collapsed" HorizontalAlignment="Right" Height="14">
+                        <Rectangle Width="3" Height="8" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource PrimaryBrush}" Margin="0,6,2,0" />
+                        <Rectangle Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource PrimaryBrush}" Margin="0,0,2,0" />
+                        <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource PrimaryBrush}" Margin="0,4,0,0" />
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Border>
         <DataTemplate.Triggers>
@@ -33,11 +45,29 @@
                 <Setter TargetName="CardRoot" Property="BorderThickness" Value="2" />
                 <Setter TargetName="SelectedDot" Property="Visibility" Value="Visible" />
             </DataTrigger>
+            <DataTrigger Value="True">
+                <DataTrigger.Binding>
+                    <MultiBinding Converter="{StaticResource TrackIdentityMatchConverter}">
+                        <Binding />
+                        <Binding RelativeSource="{RelativeSource AncestorType=ListBox}" Path="DataContext.PlayingTrack" />
+                    </MultiBinding>
+                </DataTrigger.Binding>
+                <Setter TargetName="CardRoot" Property="Background" Value="#402A2018" />
+                <Setter TargetName="CardRoot" Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+                <Setter TargetName="CardRoot" Property="BorderThickness" Value="2" />
+                <Setter TargetName="SelectedDot" Property="Visibility" Value="Collapsed" />
+                <Setter TargetName="PlayingBars" Property="Visibility" Value="Visible" />
+            </DataTrigger>
         </DataTemplate.Triggers>
     </DataTemplate>
 
     <DataTemplate x:Key="HistoryItemTemplate">
-        <Border Padding="12" CornerRadius="10" Background="#332A2A3F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" Margin="0,0,0,10">
+        <Border Padding="12" CornerRadius="10" Background="#332A2A3F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" Margin="0,0,0,10" Cursor="Hand">
+            <Border.InputBindings>
+                <MouseBinding MouseAction="LeftDoubleClick"
+                              Command="{Binding DataContext.ReplayHistoryEntryCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                              CommandParameter="{Binding}" />
+            </Border.InputBindings>
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="48" />
