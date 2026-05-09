@@ -28,9 +28,9 @@
                         <TextBlock Text="{Binding DurationText}" Foreground="{StaticResource MutedForegroundBrush}" FontSize="12" Margin="10,3,0,0" />
                     </StackPanel>
                 </StackPanel>
-                <Grid Grid.Column="2" Width="18" HorizontalAlignment="Right" VerticalAlignment="Top">
-                    <Ellipse x:Name="SelectedDot" Width="8" Height="8" Fill="{StaticResource PrimaryBrush}" Visibility="Collapsed" HorizontalAlignment="Right" />
-                    <StackPanel x:Name="PlayingBars" Orientation="Horizontal" Visibility="Collapsed" HorizontalAlignment="Right" Height="14">
+                <Grid Grid.Column="2" Width="18" Height="64" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Ellipse x:Name="SelectedDot" Width="8" Height="8" Fill="{StaticResource PrimaryBrush}" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+                    <StackPanel x:Name="PlayingBars" Orientation="Horizontal" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Top" Height="14">
                         <Rectangle Width="3" Height="8" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource PrimaryBrush}" Margin="0,6,2,0" />
                         <Rectangle Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource PrimaryBrush}" Margin="0,0,2,0" />
                         <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource PrimaryBrush}" Margin="0,4,0,0" />
@@ -55,7 +55,6 @@
                 <Setter TargetName="CardRoot" Property="Background" Value="#402A2018" />
                 <Setter TargetName="CardRoot" Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
                 <Setter TargetName="CardRoot" Property="BorderThickness" Value="2" />
-                <Setter TargetName="SelectedDot" Property="Visibility" Value="Collapsed" />
                 <Setter TargetName="PlayingBars" Property="Visibility" Value="Visible" />
             </DataTrigger>
         </DataTemplate.Triggers>
