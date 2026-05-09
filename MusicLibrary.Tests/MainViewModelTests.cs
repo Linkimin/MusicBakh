@@ -126,6 +126,9 @@ public sealed class MainViewModelTests
         viewModel.PlayPauseCommand.Execute(null);
 
         Assert.Single(viewModel.PlaybackHistory);
+        Assert.Equal(1, player.OpenCallCount);
+        Assert.Equal(2, player.PlayCallCount);
+        Assert.Equal(1, player.PauseCallCount);
     }
 
     [Fact]
@@ -227,12 +230,50 @@ public sealed class MainViewModelTests
         Assert.Equal(second, viewModel.SelectedTrack);
         Assert.Equal(second, viewModel.PlayingTrack);
         Assert.True(viewModel.IsPlaying);
-        Assert.Equal(1, player.OpenCount);
-        Assert.Equal(1, player.PlayCount);
+        Assert.Equal(1, player.OpenCallCount);
+        Assert.Equal(1, player.PlayCallCount);
 
         player.RaiseOpenedForTest();
 
         Assert.Single(viewModel.PlaybackHistory);
+    }
+
+    [Fact]
+    public void PlayTrackCommand_OpenFailure_ResetsPlaybackState()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        Track second = viewModel.DisplayedTracks[1];
+        player.OpenResult = OperationResult.Error("open failed");
+
+        viewModel.PlayTrackCommand.Execute(second);
+
+        Assert.Equal(second, viewModel.SelectedTrack);
+        Assert.Null(viewModel.PlayingTrack);
+        Assert.False(viewModel.IsPlaying);
+        Assert.Equal(1, player.OpenCallCount);
+        Assert.Equal(0, player.PlayCallCount);
+        Assert.Equal(1, player.StopCallCount);
+        Assert.Empty(viewModel.PlaybackHistory);
+        Assert.Contains("open failed", viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public void PlayTrackCommand_PlayFailure_ResetsPlaybackState()
+    {
+        var (viewModel, player) = CreateViewModelWithPlayer();
+        Track second = viewModel.DisplayedTracks[1];
+        player.PlayResult = OperationResult.Error("play failed");
+
+        viewModel.PlayTrackCommand.Execute(second);
+
+        Assert.Equal(second, viewModel.SelectedTrack);
+        Assert.Null(viewModel.PlayingTrack);
+        Assert.False(viewModel.IsPlaying);
+        Assert.Equal(1, player.OpenCallCount);
+        Assert.Equal(1, player.PlayCallCount);
+        Assert.Equal(1, player.StopCallCount);
+        Assert.Empty(viewModel.PlaybackHistory);
+        Assert.Contains("play failed", viewModel.StatusMessage);
     }
 
     [Fact]
@@ -418,27 +459,39 @@ public sealed class MainViewModelTests
         public TimeSpan Position { get; set; }
         public TimeSpan Duration { get; } = TimeSpan.FromSeconds(100);
         public string? LastOpenedFilePath { get; private set; }
-        public int OpenCount { get; private set; }
-        public int PlayCount { get; private set; }
+        public OperationResult OpenResult { get; set; } = OperationResult.Success("opened");
+        public OperationResult PlayResult { get; set; } = OperationResult.Success("playing");
+        public int OpenCallCount { get; private set; }
+        public int PlayCallCount { get; private set; }
+        public int PauseCallCount { get; private set; }
+        public int StopCallCount { get; private set; }
 
         public OperationResult Open(string filePath)
         {
-            OpenCount++;
+            OpenCallCount++;
             LastOpenedFilePath = filePath;
-            return OperationResult.Success("opened");
+            return OpenResult;
         }
 
         public OperationResult Play()
         {
-            PlayCount++;
-            IsPlaying = true;
-            return OperationResult.Success("playing");
+            PlayCallCount++;
+            if (PlayResult.IsSuccess)
+            {
+                IsPlaying = true;
+            }
+            return PlayResult;
         }
 
-        public void Pause() => IsPlaying = false;
+        public void Pause()
+        {
+            PauseCallCount++;
+            IsPlaying = false;
+        }
 
         public void Stop()
         {
+            StopCallCount++;
             IsPlaying = false;
             Position = TimeSpan.Zero;
         }
