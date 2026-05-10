@@ -31,32 +31,16 @@
         </Setter>
     </Style>
 
-    <!-- Круглый thumb: постоянный размер, hover меняет только цвет и тень. -->
+    <!-- Невидимый thumb сохраняет контракт Slider/Track, но визуально оставляет только линию. -->
     <Style x:Key="MusicBakhSliderThumbStyle" TargetType="Thumb">
-        <Setter Property="Width" Value="16" />
-        <Setter Property="Height" Value="16" />
+        <Setter Property="Width" Value="0" />
+        <Setter Property="Height" Value="0" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
-                    <Ellipse x:Name="ThumbRoot"
-                             Fill="{StaticResource PrimaryBrush}"
-                             Stroke="{StaticResource BackgroundBrush}"
-                             StrokeThickness="1">
-                        <Ellipse.Effect>
-                            <DropShadowEffect Color="#D4A574" BlurRadius="14" ShadowDepth="0" Opacity="0.24" />
-                        </Ellipse.Effect>
-                    </Ellipse>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ThumbRoot" Property="Fill" Value="#E7BF8E" />
-                        </Trigger>
-                        <Trigger Property="IsDragging" Value="True">
-                            <Setter TargetName="ThumbRoot" Property="Fill" Value="#F0CAA0" />
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="ThumbRoot" Property="Opacity" Value="0.35" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
+                    <Border Background="Transparent" />
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
