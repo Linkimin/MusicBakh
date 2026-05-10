@@ -1,0 +1,114 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Левая заполненная часть слайдера: показывает текущую позицию / громкость. -->
+    <Style x:Key="MusicBakhSliderDecreaseButtonStyle" TargetType="RepeatButton">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Background" Value="{StaticResource PrimaryBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="3" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Правая незаполненная часть слайдера: тихий фон без системных цветов. -->
+    <Style x:Key="MusicBakhSliderIncreaseButtonStyle" TargetType="RepeatButton">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Background" Value="#332A2A3F" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="3" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Круглый thumb: постоянный размер, hover меняет только цвет и тень. -->
+    <Style x:Key="MusicBakhSliderThumbStyle" TargetType="Thumb">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <Ellipse x:Name="ThumbRoot"
+                             Fill="{StaticResource PrimaryBrush}"
+                             Stroke="{StaticResource BackgroundBrush}"
+                             StrokeThickness="1">
+                        <Ellipse.Effect>
+                            <DropShadowEffect Color="#D4A574" BlurRadius="14" ShadowDepth="0" Opacity="0.24" />
+                        </Ellipse.Effect>
+                    </Ellipse>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ThumbRoot" Property="Fill" Value="#E7BF8E" />
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="ThumbRoot" Property="Fill" Value="#F0CAA0" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="ThumbRoot" Property="Opacity" Value="0.35" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Базовый горизонтальный слайдер плеера. Tag задаёт высоту дорожки: seek=6, volume=5. -->
+    <Style x:Key="PlayerSliderStyle" TargetType="Slider">
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Tag" Value="6" />
+        <Setter Property="Background" Value="#332A2A3F" />
+        <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Slider">
+                    <Grid x:Name="SliderRoot"
+                          MinHeight="{TemplateBinding Height}"
+                          SnapsToDevicePixels="True">
+                        <Track x:Name="PART_Track"
+                               Height="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"
+                               VerticalAlignment="Center">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="Slider.DecreaseLarge"
+                                              Background="{StaticResource PrimaryBrush}"
+                                              Style="{StaticResource MusicBakhSliderDecreaseButtonStyle}" />
+                            </Track.DecreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Style="{StaticResource MusicBakhSliderThumbStyle}" />
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="Slider.IncreaseLarge"
+                                              Background="#332A2A3F"
+                                              Style="{StaticResource MusicBakhSliderIncreaseButtonStyle}" />
+                            </Track.IncreaseRepeatButton>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="SliderRoot" Property="Opacity" Value="0.38" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="SeekSliderStyle" TargetType="Slider" BasedOn="{StaticResource PlayerSliderStyle}">
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Tag" Value="6" />
+    </Style>
+
+    <Style x:Key="VolumeSliderStyle" TargetType="Slider" BasedOn="{StaticResource PlayerSliderStyle}">
+        <Setter Property="Height" Value="24" />
+        <Setter Property="Tag" Value="5" />
+    </Style>
+</ResourceDictionary>
