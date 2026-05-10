@@ -389,6 +389,108 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void MediaEnded_RepeatOff_ClearsPlayingTrack()
+    {
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
+        Track last = viewModel.DisplayedTracks[1];
+        viewModel.SelectedTrack = last;
+        viewModel.PlayPauseCommand.Execute(null);
+        player.Position = TimeSpan.FromSeconds(42);
+
+        player.RaiseEndedForTest();
+
+        Assert.Null(viewModel.PlayingTrack);
+        Assert.False(viewModel.IsPlaying);
+        Assert.Equal(TimeSpan.Zero, viewModel.CurrentPosition);
+        Assert.Contains("завершено", viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public void MediaEnded_RepeatCurrent_RestartsSameTrack()
+    {
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
+        Track first = viewModel.DisplayedTracks[0];
+        viewModel.SelectedTrack = first;
+        viewModel.PlayPauseCommand.Execute(null);
+        player.Position = TimeSpan.FromSeconds(42);
+        viewModel.RepeatMode = RepeatMode.Current;
+
+        player.RaiseEndedForTest();
+
+        Assert.Equal(first, viewModel.SelectedTrack);
+        Assert.Equal(first, viewModel.PlayingTrack);
+        Assert.True(viewModel.IsPlaying);
+        Assert.Equal(TimeSpan.Zero, viewModel.CurrentPosition);
+        Assert.Equal(2, player.OpenCallCount);
+        Assert.Equal(first.FilePath, player.LastOpenedFilePath);
+    }
+
+    [Fact]
+    public void MediaEnded_RepeatLibrary_AdvancesAndWrapsAtEnd()
+    {
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
+        Track first = viewModel.DisplayedTracks[0];
+        Track second = viewModel.DisplayedTracks[1];
+        viewModel.SelectedTrack = first;
+        viewModel.PlayPauseCommand.Execute(null);
+        viewModel.RepeatMode = RepeatMode.Library;
+
+        player.RaiseEndedForTest();
+
+        Assert.Equal(second, viewModel.SelectedTrack);
+        Assert.Equal(second, viewModel.PlayingTrack);
+        Assert.Equal(second.FilePath, player.LastOpenedFilePath);
+
+        player.RaiseEndedForTest();
+
+        Assert.Equal(first, viewModel.SelectedTrack);
+        Assert.Equal(first, viewModel.PlayingTrack);
+        Assert.Equal(first.FilePath, player.LastOpenedFilePath);
+    }
+
+    [Fact]
+    public void MediaEnded_RepeatOff_NotAtLast_AutoAdvances()
+    {
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
+        Track first = viewModel.DisplayedTracks[0];
+        Track second = viewModel.DisplayedTracks[1];
+        viewModel.SelectedTrack = first;
+        viewModel.PlayPauseCommand.Execute(null);
+
+        player.RaiseEndedForTest();
+
+        Assert.Equal(second, viewModel.SelectedTrack);
+        Assert.Equal(second, viewModel.PlayingTrack);
+        Assert.True(viewModel.IsPlaying);
+        Assert.Equal(second.FilePath, player.LastOpenedFilePath);
+    }
+
+    [Fact]
+    public void MediaFailed_DuringAutoNext_StopsChain()
+    {
+        var tracks = new[]
+        {
+            new Track { Id = 1, Title = "One", Artist = "Band", Genre = "Рок", Duration = TimeSpan.FromSeconds(100), FilePath = "one.mp3" },
+            new Track { Id = 2, Title = "Two", Artist = "Band", Genre = "Рок", Duration = TimeSpan.FromSeconds(100), FilePath = "two.mp3" },
+            new Track { Id = 3, Title = "Three", Artist = "Band", Genre = "Рок", Duration = TimeSpan.FromSeconds(100), FilePath = "three.mp3" }
+        };
+        var player = new FakeAudioPlayerService();
+        var viewModel = CreateViewModel(tracks, player, new FakeFileService());
+        viewModel.SelectedTrack = viewModel.DisplayedTracks[0];
+        viewModel.PlayPauseCommand.Execute(null);
+
+        player.RaiseEndedForTest();
+        player.RaiseFailedForTest("broken file");
+        player.RaiseEndedForTest();
+
+        Assert.Null(viewModel.PlayingTrack);
+        Assert.False(viewModel.IsPlaying);
+        Assert.Equal(2, player.OpenCallCount);
+        Assert.Equal("two.mp3", player.LastOpenedFilePath);
+        Assert.Contains("broken file", viewModel.StatusMessage);
+    }
+
+    [Fact]
     public void Volume_Setter_UpdatesPlayerAndSaves()
     {
         var (viewModel, player, storage) = CreateViewModelWithPlayer();

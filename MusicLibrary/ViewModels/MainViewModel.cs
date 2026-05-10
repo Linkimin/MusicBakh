@@ -710,10 +710,44 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void HandleMediaEnded()
     {
-        ResetPlaybackState();
-        SetStatus(OperationResult.Info("Воспроизведение завершено."));
+        Track? finished = PlayingTrack;
+
+        _audioPlayerService.Stop();
+        _progressTimer.Stop();
+        IsPlaying = false;
+        _isPaused = false;
+        CurrentPosition = TimeSpan.Zero;
+        CurrentDuration = TimeSpan.Zero;
+        _pendingHistoryTrack = null;
+
+        if (finished is null)
+        {
+            return;
+        }
+
+        Track? next = ResolveStrategy(RepeatMode).GetNext(finished, DisplayedTracks);
+        if (next is null)
+        {
+            PlayingTrack = null;
+            SetStatus(OperationResult.Info("Воспроизведение завершено."));
+            return;
+        }
+
+        SelectedTrack = next;
+        StartOrResumeTrack(next);
     }
 
+    private static IPlaybackQueueStrategy ResolveStrategy(RepeatMode mode)
+    {
+        return mode switch
+        {
+            RepeatMode.Current => RepeatCurrentStrategy.Instance,
+            RepeatMode.Library => RepeatLibraryStrategy.Instance,
+            _ => NoRepeatStrategy.Instance
+        };
+    }
+
+    // MediaFailed обрывает цепочку auto-next: иначе на повреждённой библиотеке можно уйти в каскад ошибок.
     private void HandleMediaFailed(string message)
     {
         ResetPlaybackState();
