@@ -59,8 +59,10 @@ public partial class MainWindow : Window
             new MessageBoxConfirmationService(),
             playerSettingsStorage);
 
-        // RepeatMode выставляется после конструктора ViewModel, потому что setter
-        // также сохраняет настройки — это безвредная повторная запись.
+        // Гидратируем ViewModel тем же снимком настроек: сеттеры могут сделать
+        // несколько маленьких повторных сохранений, зато финальная запись согласована.
+        _viewModel.Volume = playerSettings.Volume;
+        _viewModel.IsMuted = playerSettings.IsMuted;
         _viewModel.RepeatMode = playerSettings.RepeatMode;
 
         DataContext = _viewModel;
