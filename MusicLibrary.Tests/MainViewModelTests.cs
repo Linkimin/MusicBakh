@@ -5,6 +5,7 @@ using MusicLibrary.Services.Storage;
 using MusicLibrary.Services.Tracks;
 using MusicLibrary.ViewModels;
 using System.IO;
+using System.Reflection;
 
 namespace MusicLibrary.Tests;
 
@@ -672,6 +673,23 @@ public sealed class MainViewModelTests
         viewModel.SeekToCommand.Execute(TimeSpan.FromSeconds(45));
 
         Assert.Equal(TimeSpan.FromSeconds(7), player.Position);
+    }
+
+    [Fact]
+    public void RefreshProgress_IsSeeking_DoesNotOverwriteCurrentPosition()
+    {
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
+        typeof(MainViewModel)
+            .GetProperty(nameof(MainViewModel.CurrentPosition))!
+            .SetValue(viewModel, TimeSpan.FromSeconds(12));
+        viewModel.IsSeeking = true;
+        player.Position = TimeSpan.FromSeconds(44);
+
+        typeof(MainViewModel)
+            .GetMethod("RefreshProgress", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(viewModel, null);
+
+        Assert.Equal(TimeSpan.FromSeconds(12), viewModel.CurrentPosition);
     }
 
     private static MainViewModel CreateViewModel()

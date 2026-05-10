@@ -56,6 +56,17 @@ public sealed class JsonPlayerSettingsStorageTests : IDisposable
     }
 
     [Fact]
+    public void Load_MissingFields_ReturnsDefault()
+    {
+        Directory.CreateDirectory(_tempDir);
+        File.WriteAllText(_settingsPath, "{}");
+
+        PlayerSettings settings = _storage.Load();
+
+        Assert.Equal(PlayerSettings.Default, settings);
+    }
+
+    [Fact]
     public void Load_VolumeOutsideRange_ClampedToZeroOne()
     {
         Directory.CreateDirectory(_tempDir);
@@ -77,6 +88,17 @@ public sealed class JsonPlayerSettingsStorageTests : IDisposable
     {
         Directory.CreateDirectory(_tempDir);
         File.WriteAllText(_settingsPath, """{"volume":0.5,"isMuted":false,"repeatMode":"Shuffle"}""");
+
+        PlayerSettings settings = _storage.Load();
+
+        Assert.Equal(PlayerSettings.Default, settings);
+    }
+
+    [Fact]
+    public void Load_NumericUnknownRepeatMode_ReturnsDefault()
+    {
+        Directory.CreateDirectory(_tempDir);
+        File.WriteAllText(_settingsPath, """{"volume":0.5,"isMuted":false,"repeatMode":123}""");
 
         PlayerSettings settings = _storage.Load();
 

@@ -16,7 +16,7 @@ public sealed class JsonPlayerSettingsStorage : IPlayerSettingsStorage
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
-        Converters = { new JsonStringEnumConverter() }
+        Converters = { new JsonStringEnumConverter(allowIntegerValues: false) }
     };
 
     private readonly string _filePath;
@@ -47,9 +47,17 @@ public sealed class JsonPlayerSettingsStorage : IPlayerSettingsStorage
                 return PlayerSettings.Default;
             }
 
+            if (dto.Volume is not double volume ||
+                dto.IsMuted is not bool isMuted ||
+                dto.RepeatMode is not RepeatMode repeatMode ||
+                !Enum.IsDefined(repeatMode))
+            {
+                return PlayerSettings.Default;
+            }
+
             // Ограничиваем громкость допустимым диапазоном — иначе MediaPlayer бросит ArgumentOutOfRange.
-            double volume = Math.Clamp(dto.Volume, 0.0, 1.0);
-            return new PlayerSettings(volume, dto.IsMuted, dto.RepeatMode);
+            volume = Math.Clamp(volume, 0.0, 1.0);
+            return new PlayerSettings(volume, isMuted, repeatMode);
         }
         catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -78,5 +86,5 @@ public sealed class JsonPlayerSettingsStorage : IPlayerSettingsStorage
         }
     }
 
-    private sealed record PlayerSettingsDto(double Volume, bool IsMuted, RepeatMode RepeatMode);
+    private sealed record PlayerSettingsDto(double? Volume, bool? IsMuted, RepeatMode? RepeatMode);
 }

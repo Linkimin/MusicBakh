@@ -80,9 +80,13 @@
                             <Style x:Key="PlayPauseIconStyle" TargetType="Path">
                                 <Setter Property="Data" Value="{StaticResource IconPlayGeometry}" />
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding IsSelectedPlaying}" Value="True" />
+                                            <Condition Binding="{Binding IsPlaying}" Value="True" />
+                                        </MultiDataTrigger.Conditions>
                                         <Setter Property="Data" Value="{StaticResource IconPauseGeometry}" />
-                                    </DataTrigger>
+                                    </MultiDataTrigger>
                                 </Style.Triggers>
                             </Style>
 
