@@ -44,7 +44,7 @@
 ## Запуск из исходников
 
 ```powershell
-git clone https://github.com/Matvey-Bakhmatov/MusicBakh.git
+git clone https://github.com/Linkimin/MusicBakh.git
 cd MusicBakh
 dotnet build
 dotnet run --project MusicLibrary
