@@ -93,7 +93,7 @@ public partial class MainWindow : Window
         int textColor = ToColorRef(0xF4, 0xEC, 0xE3);
         _ = DwmSetWindowAttribute(hwnd, DwmWindowAttribute.TextColor, ref textColor, sizeof(int));
 
-        int borderColor = ToColorRef(0xB8, 0x86, 0x4F);
+        int borderColor = ToColorRef(0x16, 0x16, 0x1F);
         _ = DwmSetWindowAttribute(hwnd, DwmWindowAttribute.BorderColor, ref borderColor, sizeof(int));
     }
 
