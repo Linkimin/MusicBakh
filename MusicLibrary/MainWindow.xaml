@@ -151,7 +151,8 @@
                             <TextBlock Text="{Binding OtherPlayingText}" Foreground="{StaticResource PrimaryBrush}" FontSize="13" TextTrimming="CharacterEllipsis" />
                         </Border>
 
-                        <Grid Margin="0,0,0,12">
+                        <Grid Margin="0,0,0,12"
+                              Visibility="{Binding IsSelectedPlaying, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="42" />
                                 <ColumnDefinition Width="*" />
@@ -160,6 +161,7 @@
                             <TextBlock Grid.Column="0" Text="{Binding CurrentPositionText}" Foreground="{StaticResource MutedForegroundBrush}" VerticalAlignment="Center" />
                             <Slider x:Name="SeekSlider"
                                     Grid.Column="1"
+                                    Style="{StaticResource SeekSliderStyle}"
                                     Minimum="0"
                                     Maximum="{Binding ProgressMaximum}"
                                     Value="{Binding ProgressValue, Mode=OneWay}"
@@ -200,6 +202,7 @@
                             <Path Grid.Column="0" Data="{StaticResource IconVolumeGeometry}" Fill="{StaticResource MutedForegroundBrush}" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,10,0" />
                             <Slider x:Name="VolumeSlider"
                                     Grid.Column="1"
+                                    Style="{StaticResource VolumeSliderStyle}"
                                     Minimum="0"
                                     Maximum="1"
                                     Value="{Binding Volume, Mode=TwoWay}"
@@ -210,9 +213,26 @@
                                 <Path Style="{StaticResource MuteIconStyle}" Fill="{StaticResource PrimaryBrush}" Width="18" Height="18" Stretch="Uniform" />
                             </Button>
                             <Button Grid.Column="4" Command="{Binding CycleRepeatModeCommand}" Style="{StaticResource IconButtonStyle}" ToolTip="Режим повтора" Margin="4,0,0,0">
-                                <Grid Width="22" Height="22">
-                                    <Path Data="{StaticResource IconRepeatGeometry}" Style="{StaticResource RepeatIconStyle}" Width="20" Height="20" Stretch="Uniform" />
-                                    <TextBlock Style="{StaticResource RepeatLabelStyle}" FontSize="8" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+                                <Grid Width="28" Height="30">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="18" />
+                                        <RowDefinition Height="12" />
+                                    </Grid.RowDefinitions>
+                                    <Path Grid.Row="0"
+                                          Data="{StaticResource IconRepeatGeometry}"
+                                          Style="{StaticResource RepeatIconStyle}"
+                                          Width="18"
+                                          Height="18"
+                                          Stretch="Uniform"
+                                          HorizontalAlignment="Center" />
+                                    <TextBlock Grid.Row="1"
+                                               Style="{StaticResource RepeatLabelStyle}"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               MinWidth="24"
+                                               TextAlignment="Center"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Top" />
                                 </Grid>
                             </Button>
                         </Grid>
