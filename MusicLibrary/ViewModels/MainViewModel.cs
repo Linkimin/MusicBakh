@@ -79,6 +79,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             parameter => ReplayHistoryEntry(parameter as PlaybackEntry),
             parameter => parameter is PlaybackEntry);
 
+        SkipForwardCommand = new RelayCommand(_ => SkipBy(TimeSpan.FromSeconds(10)), _ => PlayingTrack is not null);
+        SkipBackwardCommand = new RelayCommand(_ => SkipBy(TimeSpan.FromSeconds(-10)), _ => PlayingTrack is not null);
+        PreviousTrackCommand = new RelayCommand(_ => GoToTrackByOffset(-1), _ => CanGoToOffset(-1));
+        NextTrackCommand = new RelayCommand(_ => GoToTrackByOffset(+1), _ => CanGoToOffset(+1));
+        ToggleMuteCommand = new RelayCommand(_ => IsMuted = !IsMuted);
+        CycleRepeatModeCommand = new RelayCommand(_ => CycleRepeatMode());
+
         _audioPlayerService.MediaOpened += (_, filePath) => HandleMediaOpened(filePath);
         _audioPlayerService.MediaEnded += (_, _) => HandleMediaEnded();
         _audioPlayerService.MediaFailed += (_, message) => HandleMediaFailed(message);
@@ -98,6 +105,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ICommand DeleteTrackCommand { get; }
     public ICommand PlayTrackCommand { get; }
     public ICommand ReplayHistoryEntryCommand { get; }
+    public ICommand SkipForwardCommand { get; }
+    public ICommand SkipBackwardCommand { get; }
+    public ICommand PreviousTrackCommand { get; }
+    public ICommand NextTrackCommand { get; }
+    public ICommand ToggleMuteCommand { get; }
+    public ICommand CycleRepeatModeCommand { get; }
 
     public string SelectedGenre
     {
@@ -393,6 +406,91 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             DisplayedTracks.Add(track);
         }
+    }
+
+    private void SkipBy(TimeSpan delta)
+    {
+        TimeSpan target = _audioPlayerService.Position + delta;
+        TimeSpan duration = _audioPlayerService.Duration;
+        if (target < TimeSpan.Zero)
+        {
+            target = TimeSpan.Zero;
+        }
+        else if (duration > TimeSpan.Zero && target > duration)
+        {
+            target = duration;
+        }
+
+        _audioPlayerService.Position = target;
+        CurrentPosition = target;
+    }
+
+    private bool CanGoToOffset(int offset)
+    {
+        if (PlayingTrack is null || DisplayedTracks.Count == 0)
+        {
+            return false;
+        }
+
+        int index = IndexOfPlayingTrack();
+        if (index < 0)
+        {
+            return false;
+        }
+
+        int target = index + offset;
+        return target >= 0 && target < DisplayedTracks.Count;
+    }
+
+    private void GoToTrackByOffset(int offset)
+    {
+        if (PlayingTrack is null)
+        {
+            return;
+        }
+
+        int index = IndexOfPlayingTrack();
+        if (index < 0)
+        {
+            return;
+        }
+
+        int target = index + offset;
+        if (target < 0 || target >= DisplayedTracks.Count)
+        {
+            return;
+        }
+
+        Track next = DisplayedTracks[target];
+        SelectedTrack = next;
+        StartOrResumeTrack(next);
+    }
+
+    private int IndexOfPlayingTrack()
+    {
+        if (PlayingTrack is null)
+        {
+            return -1;
+        }
+
+        for (int i = 0; i < DisplayedTracks.Count; i++)
+        {
+            if (DisplayedTracks[i].Id == PlayingTrack.Id)
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void CycleRepeatMode()
+    {
+        RepeatMode = RepeatMode switch
+        {
+            RepeatMode.Off => RepeatMode.Current,
+            RepeatMode.Current => RepeatMode.Library,
+            _ => RepeatMode.Off
+        };
     }
 
     private void PlayOrPause()

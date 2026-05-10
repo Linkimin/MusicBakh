@@ -420,6 +420,110 @@ public sealed class MainViewModelTests
         Assert.Contains(storage.SavedSnapshots, s => s.RepeatMode == RepeatMode.Library);
     }
 
+    [Fact]
+    public void SkipForward_AtEnd_ClampsToDuration()
+    {
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
+        player.Position = TimeSpan.FromSeconds(95);
+
+        viewModel.SkipForwardCommand.Execute(null);
+
+        // Duration фейка = 100s, шаг = 10, значит должно стать 100, не 105.
+        Assert.Equal(TimeSpan.FromSeconds(100), player.Position);
+    }
+
+    [Fact]
+    public void SkipBackward_AtStart_ClampsToZero()
+    {
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
+        player.Position = TimeSpan.FromSeconds(3);
+
+        viewModel.SkipBackwardCommand.Execute(null);
+
+        Assert.Equal(TimeSpan.Zero, player.Position);
+    }
+
+    [Fact]
+    public void PreviousTrack_AtFirst_CommandDisabled()
+    {
+        var (viewModel, _, _) = CreateViewModelWithPlayer();
+        viewModel.SelectedTrack = viewModel.DisplayedTracks[0];
+        viewModel.PlayPauseCommand.Execute(null);
+
+        Assert.False(viewModel.PreviousTrackCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void NextTrack_AtLast_CommandDisabled()
+    {
+        var (viewModel, _, _) = CreateViewModelWithPlayer();
+        viewModel.SelectedTrack = viewModel.DisplayedTracks[1];
+        viewModel.PlayPauseCommand.Execute(null);
+
+        Assert.False(viewModel.NextTrackCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void NextTrack_AtFirst_AdvancesAndOpensSecondTrack()
+    {
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
+        Track first = viewModel.DisplayedTracks[0];
+        Track second = viewModel.DisplayedTracks[1];
+
+        viewModel.SelectedTrack = first;
+        viewModel.PlayPauseCommand.Execute(null);
+
+        viewModel.NextTrackCommand.Execute(null);
+
+        Assert.Equal(second, viewModel.PlayingTrack);
+        Assert.Equal(second.FilePath, player.LastOpenedFilePath);
+    }
+
+    [Fact]
+    public void PreviousTrack_AtSecond_GoesBackToFirst()
+    {
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
+        Track first = viewModel.DisplayedTracks[0];
+        Track second = viewModel.DisplayedTracks[1];
+
+        viewModel.SelectedTrack = second;
+        viewModel.PlayPauseCommand.Execute(null);
+
+        viewModel.PreviousTrackCommand.Execute(null);
+
+        Assert.Equal(first, viewModel.PlayingTrack);
+        Assert.Equal(first.FilePath, player.LastOpenedFilePath);
+    }
+
+    [Fact]
+    public void ToggleMuteCommand_FlipsIsMuted()
+    {
+        var (viewModel, _, _) = CreateViewModelWithPlayer();
+
+        viewModel.ToggleMuteCommand.Execute(null);
+        Assert.True(viewModel.IsMuted);
+
+        viewModel.ToggleMuteCommand.Execute(null);
+        Assert.False(viewModel.IsMuted);
+    }
+
+    [Fact]
+    public void CycleRepeatModeCommand_CyclesOffCurrentLibraryOff()
+    {
+        var (viewModel, _, _) = CreateViewModelWithPlayer();
+
+        Assert.Equal(RepeatMode.Off, viewModel.RepeatMode);
+
+        viewModel.CycleRepeatModeCommand.Execute(null);
+        Assert.Equal(RepeatMode.Current, viewModel.RepeatMode);
+
+        viewModel.CycleRepeatModeCommand.Execute(null);
+        Assert.Equal(RepeatMode.Library, viewModel.RepeatMode);
+
+        viewModel.CycleRepeatModeCommand.Execute(null);
+        Assert.Equal(RepeatMode.Off, viewModel.RepeatMode);
+    }
+
     private static MainViewModel CreateViewModel()
     {
         return CreateViewModelWithPlayer().ViewModel;
