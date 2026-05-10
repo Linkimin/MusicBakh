@@ -7,8 +7,23 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <LangVersion>14.0</LangVersion>
-    <!-- Controls the executable and taskbar icon for Windows builds. -->
+    <!-- Имя выходного exe и фирменное имя продукта. RootNamespace оставлен -->
+    <!-- как MusicLibrary, чтобы не править все using-и в коде. -->
+    <AssemblyName>MusicBakh</AssemblyName>
+    <RootNamespace>MusicLibrary</RootNamespace>
+    <!-- Иконка для exe и панели задач. -->
     <ApplicationIcon>Assets\Brand\musicbakh.ico</ApplicationIcon>
+    <!-- Метаданные сборки: попадают в свойства exe и в установщик. -->
+    <Product>MusicBakh</Product>
+    <AssemblyTitle>MusicBakh</AssemblyTitle>
+    <Company>Matvey Bakhmatov</Company>
+    <Authors>Matvey Bakhmatov</Authors>
+    <Description>Настольный музыкальный плеер и библиотека для Windows.</Description>
+    <Copyright>Copyright (c) 2026 Matvey Bakhmatov. Apache-2.0.</Copyright>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <NeutralLanguage>en-US</NeutralLanguage>
   </PropertyGroup>
 
   <ItemGroup>
