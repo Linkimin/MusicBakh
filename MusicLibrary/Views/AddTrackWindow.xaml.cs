@@ -8,6 +8,7 @@ public partial class AddTrackWindow : Window
     public AddTrackWindow(AddTrackViewModel viewModel)
     {
         InitializeComponent();
+        SourceInitialized += (_, _) => NativeWindowAppearance.Apply(this);
         DataContext = viewModel;
         viewModel.CloseRequested += (_, confirmed) =>
         {
