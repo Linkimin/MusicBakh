@@ -40,14 +40,28 @@ public partial class MainWindow : Window
         var openFileDialog = new OpenFileDialogService();
         var addTrackDialog = new AddTrackDialogService(openFileDialog, importer);
 
+        // Поднимаем настройки плеера до создания плеера и ViewModel —
+        // громкость и mute должны примениться до первой команды Play.
+        var playerSettingsStorage = new JsonPlayerSettingsStorage(JsonPlayerSettingsStorage.DefaultPath);
+        PlayerSettings playerSettings = playerSettingsStorage.Load();
+
+        var audioPlayerService = new MediaPlayerAudioService();
+        audioPlayerService.Volume = playerSettings.Volume;
+        audioPlayerService.IsMuted = playerSettings.IsMuted;
+
         _viewModel = new MainViewModel(
             repository,
             new FileService(),
             new SaveFileDialogService(),
-            new MediaPlayerAudioService(),
+            audioPlayerService,
             addTrackDialog,
             storage,
-            new MessageBoxConfirmationService());
+            new MessageBoxConfirmationService(),
+            playerSettingsStorage);
+
+        // RepeatMode выставляется после конструктора ViewModel, потому что setter
+        // также сохраняет настройки — это безвредная повторная запись.
+        _viewModel.RepeatMode = playerSettings.RepeatMode;
 
         DataContext = _viewModel;
     }
