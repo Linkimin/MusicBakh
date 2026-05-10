@@ -57,7 +57,7 @@ public partial class MainWindow : Window
             audioPlayerService,
             addTrackDialog,
             storage,
-            new MessageBoxConfirmationService(),
+            new ConfirmationDialogService(),
             playerSettingsStorage);
 
         // Гидратируем ViewModel тем же снимком настроек: сеттеры могут сделать
