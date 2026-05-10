@@ -30,7 +30,5 @@
 
     <!-- Повтор: круговая стрелка для выключенного режима и повтора библиотеки. -->
     <Geometry x:Key="IconRepeatGeometry">M 4,5 H 11 L 11,3 L 14,6 L 11,9 L 11,7 H 5 V 9 H 4 Z M 12,11 H 5 L 5,13 L 2,10 L 5,7 L 5,9 H 11 V 7 H 12 Z</Geometry>
-    <Geometry x:Key="IconRepeatOffGeometry">M 4,5 H 11 L 11,3 L 14,6 L 11,9 L 11,7 H 5 V 9 H 4 Z M 12,11 H 5 L 5,13 L 2,10 L 5,7 L 5,9 H 11 V 7 H 12 Z</Geometry>
-    <Geometry x:Key="IconRepeatLibraryGeometry">M 4,5 H 11 L 11,3 L 14,6 L 11,9 L 11,7 H 5 V 9 H 4 Z M 12,11 H 5 L 5,13 L 2,10 L 5,7 L 5,9 H 11 V 7 H 12 Z</Geometry>
 
 </ResourceDictionary>
