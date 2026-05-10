@@ -89,12 +89,30 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
         }
     }
 
+    public double Volume
+    {
+        get => _player.Volume;
+        // Защитный clamp на случай, если откуда-то прилетит volume > 1 или < 0.
+        set => _player.Volume = Math.Clamp(value, 0.0, 1.0);
+    }
+
+    public bool IsMuted
+    {
+        get => _player.IsMuted;
+        set => _player.IsMuted = value;
+    }
+
     public OperationResult Open(string filePath)
     {
         try
         {
+            double volume = _player.Volume;
+            bool isMuted = _player.IsMuted;
+
             _player.Close();
             _player = CreatePlayer(filePath);
+            _player.Volume = volume;
+            _player.IsMuted = isMuted;
             _currentFilePath = filePath;
             _player.Open(new Uri(filePath, UriKind.Absolute));
             return OperationResult.Success("Трек подготовлен к воспроизведению.");

@@ -9,6 +9,7 @@ using MusicLibrary.ViewModels;
 using MusicLibrary.Views;
 using System.Net.Http;
 using System.Windows;
+using System.Windows.Input;
 
 namespace MusicLibrary;
 
@@ -19,6 +20,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        SourceInitialized += OnSourceInitialized;
 
         // В учебной работе логика располагалась в окне. Здесь окно только собирает зависимости,
         // а сценарии приложения выполняет MainViewModel через сервисы.
@@ -39,16 +41,55 @@ public partial class MainWindow : Window
         var openFileDialog = new OpenFileDialogService();
         var addTrackDialog = new AddTrackDialogService(openFileDialog, importer);
 
+        // Поднимаем настройки плеера до создания плеера и ViewModel —
+        // громкость и mute должны примениться до первой команды Play.
+        var playerSettingsStorage = new JsonPlayerSettingsStorage(JsonPlayerSettingsStorage.DefaultPath);
+        PlayerSettings playerSettings = playerSettingsStorage.Load();
+
+        var audioPlayerService = new MediaPlayerAudioService();
+        audioPlayerService.Volume = playerSettings.Volume;
+        audioPlayerService.IsMuted = playerSettings.IsMuted;
+
         _viewModel = new MainViewModel(
             repository,
             new FileService(),
             new SaveFileDialogService(),
-            new MediaPlayerAudioService(),
+            audioPlayerService,
             addTrackDialog,
             storage,
-            new MessageBoxConfirmationService());
+            new ConfirmationDialogService(),
+            playerSettingsStorage);
+
+        // Гидратируем ViewModel тем же снимком настроек: сеттеры могут сделать
+        // несколько маленьких повторных сохранений, зато финальная запись согласована.
+        _viewModel.Volume = playerSettings.Volume;
+        _viewModel.IsMuted = playerSettings.IsMuted;
+        _viewModel.RepeatMode = playerSettings.RepeatMode;
 
         DataContext = _viewModel;
+    }
+
+    private void OnSourceInitialized(object? sender, EventArgs e)
+    {
+        NativeWindowAppearance.Apply(this);
+    }
+
+    // Drag по seek-слайдеру: ставим флаг, чтобы тик прогресс-таймера не перетёр Value.
+    private void OnSeekDragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e)
+    {
+        _viewModel.IsSeeking = true;
+    }
+
+    // Отпускание мыши: одинаково отрабатывает и завершение drag, и одиночный клик
+    // благодаря IsMoveToPointEnabled — Value уже находится в финальной позиции.
+    private void OnSeekPreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Slider slider)
+        {
+            _viewModel.SeekToCommand.Execute(TimeSpan.FromSeconds(slider.Value));
+        }
+
+        _viewModel.IsSeeking = false;
     }
 
     protected override void OnClosed(EventArgs e)
@@ -56,4 +97,5 @@ public partial class MainWindow : Window
         _viewModel.Dispose();
         base.OnClosed(e);
     }
+
 }

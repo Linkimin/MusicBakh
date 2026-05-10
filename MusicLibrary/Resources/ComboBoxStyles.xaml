@@ -104,7 +104,10 @@
                                 <Border.Effect>
                                     <DropShadowEffect Color="Black" BlurRadius="22" ShadowDepth="4" Opacity="0.55" />
                                 </Border.Effect>
-                                <ScrollViewer SnapsToDevicePixels="True" Padding="2">
+                                <ScrollViewer SnapsToDevicePixels="True"
+                                              Padding="2"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
                                     <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
                                 </ScrollViewer>
                             </Border>

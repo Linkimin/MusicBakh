@@ -8,9 +8,12 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Resources/Colors.xaml" />
                 <ResourceDictionary Source="Resources/Brushes.xaml" />
+                <ResourceDictionary Source="Resources/ScrollBarStyles.xaml" />
+                <ResourceDictionary Source="Resources/SliderStyles.xaml" />
                 <ResourceDictionary Source="Resources/ButtonStyles.xaml" />
                 <ResourceDictionary Source="Resources/ComboBoxStyles.xaml" />
                 <ResourceDictionary Source="Resources/ListStyles.xaml" />
+                <ResourceDictionary Source="Resources/PlayerIcons.xaml" />
                 <ResourceDictionary Source="Resources/TrackTemplates.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
@@ -21,6 +24,7 @@
                                                    InfoBrush="{StaticResource MutedForegroundBrush}"
                                                    SuccessBrush="{StaticResource SuccessBrush}"
                                                    ErrorBrush="{StaticResource ErrorBrush}" />
+            <converters:NullToBooleanConverter x:Key="NullToBooleanConverter" />
 
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         </ResourceDictionary>
