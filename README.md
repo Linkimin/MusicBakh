@@ -66,7 +66,7 @@ pwsh scripts/build-release.ps1 -Version 1.0.0
 
 ## Архитектура
 
-WPF + лёгкий MVVM на .NET 10. Зависимости собираются вручную в [MainWindow.xaml.cs](MusicLibrary/MainWindow.xaml.cs:20), без IoC-контейнера. Полное описание слоёв и сервисов — [docs/architecture.md](docs/architecture.md). Расхождения с базовой учебной работой — [docs/scope-deviations.md](docs/scope-deviations.md).
+WPF + лёгкий MVVM на .NET 10. Зависимости собираются вручную в [MainWindow.xaml.cs](MusicLibrary/MainWindow.xaml.cs:20), без IoC-контейнера. Полное описание слоёв и сервисов — [docs/architecture.md](docs/architecture.md). 
 
 ## Лицензия
 
