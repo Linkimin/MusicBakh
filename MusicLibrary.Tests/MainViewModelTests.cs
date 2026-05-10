@@ -466,6 +466,31 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void MediaEnded_AutoNextMissingFile_ClearsPlayingTrack()
+    {
+        var tracks = new[]
+        {
+            new Track { Id = 1, Title = "One", Artist = "Band", Genre = "Рок", Duration = TimeSpan.FromSeconds(100), FilePath = "one.mp3" },
+            new Track { Id = 2, Title = "Missing", Artist = "Band", Genre = "Рок", Duration = TimeSpan.FromSeconds(100), FilePath = "missing-next.mp3" }
+        };
+        var player = new FakeAudioPlayerService();
+        var viewModel = CreateViewModel(tracks, player, new FakeFileService("missing-next.mp3"));
+        viewModel.SelectedTrack = viewModel.DisplayedTracks[0];
+        viewModel.PlayPauseCommand.Execute(null);
+
+        player.RaiseEndedForTest();
+
+        Assert.Null(viewModel.PlayingTrack);
+        Assert.False(viewModel.IsPlaying);
+        Assert.Contains("Файл не найден", viewModel.StatusMessage);
+        Assert.Contains("missing-next.mp3", viewModel.StatusMessage);
+        Assert.False(viewModel.StopCommand.CanExecute(null));
+        Assert.False(viewModel.SkipForwardCommand.CanExecute(null));
+        Assert.False(viewModel.SkipBackwardCommand.CanExecute(null));
+        Assert.False(viewModel.SeekToCommand.CanExecute(TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
     public void MediaFailed_DuringAutoNext_StopsChain()
     {
         var tracks = new[]

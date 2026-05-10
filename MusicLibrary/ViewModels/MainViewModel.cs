@@ -733,6 +733,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        PlayingTrack = null;
         SelectedTrack = next;
         StartOrResumeTrack(next);
     }
