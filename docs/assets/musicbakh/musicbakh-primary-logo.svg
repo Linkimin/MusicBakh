@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="260" viewBox="0 0 900 260">
+  <rect x="38" y="42" width="170" height="170" rx="38" fill="#D4A574"/>
+  <rect x="50" y="54" width="146" height="146" rx="31" fill="#16161F"/>
+  <circle cx="123" cy="123" r="56" fill="none" stroke="#B8864F" stroke-width="3"/>
+  <text x="123" y="123" text-anchor="middle" dominant-baseline="middle" font-family="Georgia, serif" font-size="50" font-weight="700" fill="#D4A574">MB</text>
+  <path d="M78 162 L100 150 L122 160 L142 132 L166 158 L190 146" fill="none" stroke="#6BC7D8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="250" y="112" font-family="Georgia, Inter, sans-serif" font-size="76" font-weight="700" fill="#F4ECE3">MusicBakh</text>
+  <text x="255" y="166" font-family="Inter, Segoe UI, sans-serif" font-size="26" fill="#A69A8F">premium music library</text>
+  <path d="M255 195 L320 195 L355 172 L390 218 L440 176 L495 205 L570 194" fill="none" stroke="#D4A574" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
