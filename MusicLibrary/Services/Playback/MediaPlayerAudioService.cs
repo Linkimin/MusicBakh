@@ -106,8 +106,13 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
     {
         try
         {
+            double volume = _player.Volume;
+            bool isMuted = _player.IsMuted;
+
             _player.Close();
             _player = CreatePlayer(filePath);
+            _player.Volume = volume;
+            _player.IsMuted = isMuted;
             _currentFilePath = filePath;
             _player.Open(new Uri(filePath, UriKind.Absolute));
             return OperationResult.Success("Трек подготовлен к воспроизведению.");
