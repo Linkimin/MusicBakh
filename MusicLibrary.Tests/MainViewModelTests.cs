@@ -458,6 +458,8 @@ public sealed class MainViewModelTests
         public bool IsPlaying { get; private set; }
         public TimeSpan Position { get; set; }
         public TimeSpan Duration { get; } = TimeSpan.FromSeconds(100);
+        public double Volume { get; set; } = 1.0;
+        public bool IsMuted { get; set; }
         public string? LastOpenedFilePath { get; private set; }
         public OperationResult OpenResult { get; set; } = OperationResult.Success("opened");
         public OperationResult PlayResult { get; set; } = OperationResult.Success("playing");

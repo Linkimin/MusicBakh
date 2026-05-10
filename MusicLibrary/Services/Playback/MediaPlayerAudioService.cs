@@ -89,6 +89,19 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
         }
     }
 
+    public double Volume
+    {
+        get => _player.Volume;
+        // Защитный clamp на случай, если откуда-то прилетит volume > 1 или < 0.
+        set => _player.Volume = Math.Clamp(value, 0.0, 1.0);
+    }
+
+    public bool IsMuted
+    {
+        get => _player.IsMuted;
+        set => _player.IsMuted = value;
+    }
+
     public OperationResult Open(string filePath)
     {
         try

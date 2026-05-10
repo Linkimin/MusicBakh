@@ -12,6 +12,10 @@ public interface IAudioPlayerService : IDisposable
     TimeSpan Position { get; set; }
     TimeSpan Duration { get; }
 
+    // Громкость 0..1, как у System.Windows.Media.MediaPlayer.
+    double Volume { get; set; }
+    bool IsMuted { get; set; }
+
     OperationResult Open(string filePath);
     OperationResult Play();
     void Pause();
