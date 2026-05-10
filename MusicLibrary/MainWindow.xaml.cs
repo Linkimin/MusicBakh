@@ -9,6 +9,7 @@ using MusicLibrary.ViewModels;
 using MusicLibrary.Views;
 using System.Net.Http;
 using System.Windows;
+using System.Windows.Input;
 
 namespace MusicLibrary;
 
@@ -49,6 +50,32 @@ public partial class MainWindow : Window
             new MessageBoxConfirmationService());
 
         DataContext = _viewModel;
+    }
+
+    // Drag по seek-слайдеру: ставим флаг, чтобы тик прогресс-таймера не перетёр Value.
+    private void OnSeekDragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            viewModel.IsSeeking = true;
+        }
+    }
+
+    // Отпускание мыши: одинаково отрабатывает и завершение drag, и одиночный клик
+    // благодаря IsMoveToPointEnabled — Value уже находится в финальной позиции.
+    private void OnSeekPreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        if (sender is System.Windows.Controls.Slider slider)
+        {
+            viewModel.SeekToCommand.Execute(TimeSpan.FromSeconds(slider.Value));
+        }
+
+        viewModel.IsSeeking = false;
     }
 
     protected override void OnClosed(EventArgs e)
