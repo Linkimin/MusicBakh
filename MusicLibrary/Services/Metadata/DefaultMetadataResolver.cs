@@ -204,10 +204,12 @@ public sealed class DefaultMetadataResolver : IMetadataResolver
             int index = filename.IndexOf(separator, StringComparison.Ordinal);
             if (index > 0 && index < filename.Length - separator.Length)
             {
-                return (filename[..index].Trim(), filename[(index + separator.Length)..].Trim());
+                return (
+                    StripBrandSuffix(filename[..index]),
+                    StripBrandSuffix(filename[(index + separator.Length)..]));
             }
         }
 
-        return (string.Empty, filename.Trim());
+        return (string.Empty, StripBrandSuffix(filename));
     }
 }
