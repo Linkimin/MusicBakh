@@ -524,6 +524,29 @@ public sealed class MainViewModelTests
         Assert.Equal(RepeatMode.Off, viewModel.RepeatMode);
     }
 
+    [Fact]
+    public void SeekToCommand_WritesPositionToPlayer()
+    {
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
+        viewModel.SelectedTrack = viewModel.DisplayedTracks[0];
+        viewModel.PlayPauseCommand.Execute(null);
+
+        viewModel.SeekToCommand.Execute(TimeSpan.FromSeconds(45));
+
+        Assert.Equal(TimeSpan.FromSeconds(45), player.Position);
+    }
+
+    [Fact]
+    public void SeekToCommand_NoPlayingTrack_DoesNothing()
+    {
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
+        player.Position = TimeSpan.FromSeconds(7);
+
+        viewModel.SeekToCommand.Execute(TimeSpan.FromSeconds(45));
+
+        Assert.Equal(TimeSpan.FromSeconds(7), player.Position);
+    }
+
     private static MainViewModel CreateViewModel()
     {
         return CreateViewModelWithPlayer().ViewModel;

@@ -85,6 +85,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         NextTrackCommand = new RelayCommand(_ => GoToTrackByOffset(+1), _ => CanGoToOffset(+1));
         ToggleMuteCommand = new RelayCommand(_ => IsMuted = !IsMuted);
         CycleRepeatModeCommand = new RelayCommand(_ => CycleRepeatMode());
+        SeekToCommand = new RelayCommand(parameter => SeekTo(parameter as TimeSpan?), _ => PlayingTrack is not null);
 
         _audioPlayerService.MediaOpened += (_, filePath) => HandleMediaOpened(filePath);
         _audioPlayerService.MediaEnded += (_, _) => HandleMediaEnded();
@@ -111,6 +112,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ICommand NextTrackCommand { get; }
     public ICommand ToggleMuteCommand { get; }
     public ICommand CycleRepeatModeCommand { get; }
+    public ICommand SeekToCommand { get; }
 
     public string SelectedGenre
     {
@@ -672,8 +674,37 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             StringComparison.OrdinalIgnoreCase);
     }
 
+    private void SeekTo(TimeSpan? target)
+    {
+        if (target is null || PlayingTrack is null)
+        {
+            return;
+        }
+
+        TimeSpan duration = _audioPlayerService.Duration;
+        TimeSpan clamped = target.Value;
+        if (clamped < TimeSpan.Zero)
+        {
+            clamped = TimeSpan.Zero;
+        }
+        else if (duration > TimeSpan.Zero && clamped > duration)
+        {
+            clamped = duration;
+        }
+
+        _audioPlayerService.Position = clamped;
+        CurrentPosition = clamped;
+    }
+
     private void RefreshProgress()
     {
+        // Пока пользователь тянет ползунок seek-слайдера, не перезаписываем его значение из плеера —
+        // иначе позиция будет дёргаться обратно на каждом тике таймера.
+        if (_isSeeking)
+        {
+            return;
+        }
+
         CurrentPosition = _audioPlayerService.Position;
     }
 
