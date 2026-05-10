@@ -6,3 +6,5 @@ TestResults/
 *.suo
 *.cache
 .claude/
+publish/
+release/
