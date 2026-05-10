@@ -1,6 +1,7 @@
 using MusicLibrary.Models;
 using MusicLibrary.Services.Files;
 using MusicLibrary.Services.Playback;
+using MusicLibrary.Services.Storage;
 using MusicLibrary.Services.Tracks;
 using MusicLibrary.ViewModels;
 using System.IO;
@@ -43,7 +44,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void MediaOpened_AddsHistoryForPendingTrack()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
 
         viewModel.PlayPauseCommand.Execute(null);
@@ -56,7 +57,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void MediaOpened_IgnoresStaleTrackOpenEvent()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         Track firstTrack = viewModel.DisplayedTracks[0];
         Track secondTrack = viewModel.DisplayedTracks[1];
 
@@ -77,7 +78,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void MediaFailed_DoesNotAddPendingHistory()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
 
         viewModel.PlayPauseCommand.Execute(null);
@@ -90,7 +91,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void StopCommand_ClearsPendingHistory()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
         Track selectedTrack = viewModel.SelectedTrack!;
 
@@ -104,7 +105,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void MediaOpened_DoesNotDuplicateHistory_WhenRaisedTwice()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
 
         viewModel.PlayPauseCommand.Execute(null);
@@ -117,7 +118,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void PlayPauseCommand_DoesNotDuplicateHistory_WhenResumingAfterPause()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
 
         viewModel.PlayPauseCommand.Execute(null);
@@ -134,7 +135,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void ChangingSelectedTrack_DoesNotStopPlayback()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         Track first = viewModel.DisplayedTracks[0];
         Track second = viewModel.DisplayedTracks[1];
 
@@ -155,7 +156,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void ChangingGenre_DoesNotStopPlayback()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         viewModel.SelectedTrack = viewModel.DisplayedTracks.First(t => t.Genre == "Рок");
 
         viewModel.PlayPauseCommand.Execute(null);
@@ -171,7 +172,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void PlayPauseCommand_ChangingTrack_StopsPreviousAndStartsNew()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         Track first = viewModel.DisplayedTracks[0];
         Track second = viewModel.DisplayedTracks[1];
 
@@ -192,7 +193,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void PlayTrackCommand_SelectsTrackAndStartsPlayback()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         Track second = viewModel.DisplayedTracks[1];
 
         viewModel.PlayTrackCommand.Execute(second);
@@ -206,7 +207,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void PlayTrackCommand_DoesNotAddHistory_BeforeMediaOpened()
     {
-        var (viewModel, _) = CreateViewModelWithPlayer();
+        var (viewModel, _, _) = CreateViewModelWithPlayer();
         Track second = viewModel.DisplayedTracks[1];
 
         viewModel.PlayTrackCommand.Execute(second);
@@ -217,7 +218,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void PlayTrackCommand_DoesNotRestartSameAlreadyPlayingTrack()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         Track second = viewModel.DisplayedTracks[1];
 
         viewModel.PlayTrackCommand.Execute(second);
@@ -241,7 +242,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void PlayTrackCommand_OpenFailure_ResetsPlaybackState()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         Track second = viewModel.DisplayedTracks[1];
         player.OpenResult = OperationResult.Error("open failed");
 
@@ -260,7 +261,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void PlayTrackCommand_PlayFailure_ResetsPlaybackState()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         Track second = viewModel.DisplayedTracks[1];
         player.PlayResult = OperationResult.Error("play failed");
 
@@ -279,7 +280,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void PlayTrackCommand_IgnoresNonTrackParameter()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
 
         viewModel.PlayTrackCommand.Execute("not a track");
 
@@ -312,7 +313,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void ReplayHistoryEntryCommand_SelectsEntryTrackAndStartsPlayback()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         Track second = viewModel.DisplayedTracks[1];
         var entry = new PlaybackEntry { Track = second, PlayedAt = DateTime.Now };
         viewModel.PlaybackHistory.Add(entry);
@@ -328,7 +329,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void ReplayHistoryEntryCommand_DoesNotAddHistory_BeforeMediaOpened()
     {
-        var (viewModel, _) = CreateViewModelWithPlayer();
+        var (viewModel, _, _) = CreateViewModelWithPlayer();
         Track second = viewModel.DisplayedTracks[1];
         var entry = new PlaybackEntry { Track = second, PlayedAt = DateTime.Now };
         viewModel.PlaybackHistory.Add(entry);
@@ -374,7 +375,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void MediaFailed_ResetsPlaybackStateAndDuration()
     {
-        var (viewModel, player) = CreateViewModelWithPlayer();
+        var (viewModel, player, _) = CreateViewModelWithPlayer();
         viewModel.SelectedTrack = viewModel.DisplayedTracks.First();
 
         viewModel.PlayPauseCommand.Execute(null);
@@ -387,6 +388,38 @@ public sealed class MainViewModelTests
         Assert.Contains("unsupported format", viewModel.StatusMessage);
     }
 
+    [Fact]
+    public void Volume_Setter_UpdatesPlayerAndSaves()
+    {
+        var (viewModel, player, storage) = CreateViewModelWithPlayer();
+
+        viewModel.Volume = 0.42;
+
+        Assert.Equal(0.42, player.Volume);
+        Assert.Contains(storage.SavedSnapshots, s => s.Volume == 0.42);
+    }
+
+    [Fact]
+    public void IsMuted_Setter_UpdatesPlayerAndSaves()
+    {
+        var (viewModel, player, storage) = CreateViewModelWithPlayer();
+
+        viewModel.IsMuted = true;
+
+        Assert.True(player.IsMuted);
+        Assert.Contains(storage.SavedSnapshots, s => s.IsMuted);
+    }
+
+    [Fact]
+    public void RepeatMode_Setter_Saves()
+    {
+        var (viewModel, _, storage) = CreateViewModelWithPlayer();
+
+        viewModel.RepeatMode = RepeatMode.Library;
+
+        Assert.Contains(storage.SavedSnapshots, s => s.RepeatMode == RepeatMode.Library);
+    }
+
     private static MainViewModel CreateViewModel()
     {
         return CreateViewModelWithPlayer().ViewModel;
@@ -397,14 +430,27 @@ public sealed class MainViewModelTests
         FakeAudioPlayerService player,
         FakeFileService fileService)
     {
+        return CreateViewModel(tracks, player, fileService, new FakePlayerSettingsStorage());
+    }
+
+    private static MainViewModel CreateViewModel(
+        IReadOnlyList<Track> tracks,
+        FakeAudioPlayerService player,
+        FakeFileService fileService,
+        FakePlayerSettingsStorage storage)
+    {
         return new MainViewModel(
             new FakeTrackRepository(tracks),
             fileService,
             new FakeSaveFileDialogService(),
-            player);
+            player,
+            addTrackDialogService: null,
+            userTrackStorage: null,
+            confirmationService: null,
+            playerSettingsStorage: storage);
     }
 
-    private static (MainViewModel ViewModel, FakeAudioPlayerService Player) CreateViewModelWithPlayer()
+    private static (MainViewModel ViewModel, FakeAudioPlayerService Player, FakePlayerSettingsStorage Storage) CreateViewModelWithPlayer()
     {
         var tracks = new[]
         {
@@ -413,9 +459,10 @@ public sealed class MainViewModelTests
         };
 
         var player = new FakeAudioPlayerService();
-        var viewModel = CreateViewModel(tracks, player, new FakeFileService());
+        var storage = new FakePlayerSettingsStorage();
+        var viewModel = CreateViewModel(tracks, player, new FakeFileService(), storage);
 
-        return (viewModel, player);
+        return (viewModel, player, storage);
     }
 
     private sealed class FakeTrackRepository : ITrackRepository
@@ -447,6 +494,15 @@ public sealed class MainViewModelTests
     private sealed class FakeSaveFileDialogService : ISaveFileDialogService
     {
         public string? PickSavePath(string suggestedFileName) => Path.Combine(Path.GetTempPath(), suggestedFileName);
+    }
+
+    private sealed class FakePlayerSettingsStorage : IPlayerSettingsStorage
+    {
+        public PlayerSettings Loaded { get; set; } = PlayerSettings.Default;
+        public List<PlayerSettings> SavedSnapshots { get; } = new();
+
+        public PlayerSettings Load() => Loaded;
+        public void Save(PlayerSettings settings) => SavedSnapshots.Add(settings);
     }
 
     private sealed class FakeAudioPlayerService : IAudioPlayerService

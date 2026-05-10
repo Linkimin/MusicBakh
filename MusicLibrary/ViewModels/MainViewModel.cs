@@ -24,6 +24,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private readonly IAddTrackDialogService? _addTrackDialogService;
     private readonly IUserTrackStorage? _userTrackStorage;
     private readonly IConfirmationService? _confirmationService;
+    private readonly IPlayerSettingsStorage? _playerSettingsStorage;
     private readonly DispatcherTimer _progressTimer;
 
     private string _selectedGenre = AllGenres;
@@ -36,6 +37,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private Track? _pendingHistoryTrack;
     private TimeSpan _currentPosition;
     private TimeSpan _currentDuration;
+    private RepeatMode _repeatMode;
+    private double _volume = 1.0;
+    private bool _isMuted;
+    private bool _isSeeking;
 
     public MainViewModel(
         ITrackRepository trackRepository,
@@ -44,7 +49,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         IAudioPlayerService audioPlayerService,
         IAddTrackDialogService? addTrackDialogService = null,
         IUserTrackStorage? userTrackStorage = null,
-        IConfirmationService? confirmationService = null)
+        IConfirmationService? confirmationService = null,
+        IPlayerSettingsStorage? playerSettingsStorage = null)
     {
         _fileService = fileService;
         _saveFileDialogService = saveFileDialogService;
@@ -52,6 +58,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _addTrackDialogService = addTrackDialogService;
         _userTrackStorage = userTrackStorage;
         _confirmationService = confirmationService;
+        _playerSettingsStorage = playerSettingsStorage;
 
         _allTracks = new List<Track>(trackRepository.GetTracks());
         DisplayedTracks = new ObservableCollection<Track>(_allTracks);
@@ -191,6 +198,52 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     }
 
     public string PlayPauseText => IsSelectedPlaying && _isPlaying ? "Пауза" : "Воспроизвести";
+
+    public RepeatMode RepeatMode
+    {
+        get => _repeatMode;
+        set
+        {
+            if (SetProperty(ref _repeatMode, value))
+            {
+                PersistSettings();
+            }
+        }
+    }
+
+    public double Volume
+    {
+        get => _volume;
+        set
+        {
+            // Жёсткий clamp перед записью в плеер — UI слайдеру удобнее не знать про границы.
+            double clamped = Math.Clamp(value, 0.0, 1.0);
+            if (SetProperty(ref _volume, clamped))
+            {
+                _audioPlayerService.Volume = clamped;
+                PersistSettings();
+            }
+        }
+    }
+
+    public bool IsMuted
+    {
+        get => _isMuted;
+        set
+        {
+            if (SetProperty(ref _isMuted, value))
+            {
+                _audioPlayerService.IsMuted = value;
+                PersistSettings();
+            }
+        }
+    }
+
+    public bool IsSeeking
+    {
+        get => _isSeeking;
+        set => SetProperty(ref _isSeeking, value);
+    }
 
     public TimeSpan CurrentPosition
     {
@@ -542,6 +595,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         StatusMessage = result.Message;
         StatusKind = result.Kind;
+    }
+
+    private void PersistSettings()
+    {
+        _playerSettingsStorage?.Save(new PlayerSettings(_volume, _isMuted, _repeatMode));
     }
 
     public void Dispose()
