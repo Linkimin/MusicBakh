@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="MusicBakh"
+        Icon="Assets/Brand/musicbakh.ico"
         Width="1180"
         Height="760"
         MinWidth="980"
@@ -29,19 +30,11 @@
             <DockPanel VerticalAlignment="Center">
                 <Button DockPanel.Dock="Right" Content="＋ Добавить трек" Command="{Binding AddTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" Height="42" Padding="18,0" />
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="54" Height="54" CornerRadius="12" Background="{StaticResource GoldGradientBrush}">
-                        <Grid>
-                            <TextBlock Text="MB" FontSize="18" FontWeight="Bold" Foreground="{StaticResource BackgroundBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,8" />
-                            <Polyline Points="12,38 18,32 24,36 30,26 36,34 42,30"
-                                      Stroke="{StaticResource BackgroundBrush}"
-                                      StrokeThickness="2"
-                                      StrokeStartLineCap="Round"
-                                      StrokeEndLineCap="Round"
-                                      StrokeLineJoin="Round"
-                                      VerticalAlignment="Bottom"
-                                      Margin="0,0,0,8" />
-                        </Grid>
-                    </Border>
+                    <Image Width="54"
+                           Height="54"
+                           Source="Assets/Brand/musicbakh-logo.png"
+                           Stretch="Uniform"
+                           RenderOptions.BitmapScalingMode="HighQuality" />
                     <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
                         <TextBlock Text="MusicBakh" FontFamily="{StaticResource HeadingFont}" Foreground="{StaticResource PrimaryBrush}" FontSize="28" FontWeight="SemiBold" />
                         <TextBlock Text="Музыкальная библиотека" Foreground="{StaticResource MutedForegroundBrush}" FontSize="13" Margin="1,2,0,0" />

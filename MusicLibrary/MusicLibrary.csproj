@@ -7,12 +7,21 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <LangVersion>14.0</LangVersion>
+    <!-- Controls the executable and taskbar icon for Windows builds. -->
+    <ApplicationIcon>Assets\Brand\musicbakh.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <None Update="Music\**\*" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Covers\**\*" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Music\.gitkeep;Covers\.gitkeep" CopyToOutputDirectory="Never" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Assets\Brand\musicbakh.ico" />
+    <None Remove="Assets\Brand\musicbakh-logo.png" />
+    <Resource Include="Assets\Brand\musicbakh.ico" />
+    <Resource Include="Assets\Brand\musicbakh-logo.png" />
   </ItemGroup>
 
   <ItemGroup>
