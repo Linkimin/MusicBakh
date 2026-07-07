@@ -12,6 +12,8 @@ Roadmap [`docs/roadmap-vision.md`](../../roadmap-vision.md) §4.1: `1.0.5` (ит
 
 Проект перешёл из учебного в личный — временных ограничений нет, поэтому в скоуп E входят и «полированные» части (мульти-выбор DnD, инлайн-редактирование имени, переиспользуемый render-smoke-харнесс).
 
+**Связанное архитектурное решение:** плейлист-логика выносится в отдельный под-VM `PlaylistsViewModel` как первый шаг разгруза `MainViewModel` — см. [ADR-0002](../../adr/0002-extract-playlists-viewmodel.md).
+
 ## Цель
 
 1. Добавить **четвёртый вид «Плейлисты»** равноправно с Треки/Альбомы/Исполнители — на уже построенной механике вкладок + drill-down (итерация D).
@@ -53,7 +55,7 @@ Roadmap [`docs/roadmap-vision.md`](../../roadmap-vision.md) §4.1: `1.0.5` (ит
 
 **Empty-state:** «Плейлистов пока нет — создайте первый» (центрированно, серым).
 
-**Создание (инлайн):** клик по «+ Новый плейлист» → в начало списка вставляется строка в режиме редактирования (`TextBox` в фокусе, дефолт «Новый плейлист»). `Enter` — создать (вызов `IPlaylistRepository.Create(name)`), `Esc` — отменить. Пустое имя при `Enter` → «Новый плейлист» или отмена (дефолт: сохраняем «Новый плейлист»).
+**Создание (инлайн):** клик по «+ Новый плейлист» → в начало списка вставляется строка в режиме редактирования (`TextBox` в фокусе, преднаполнен «Новый плейлист» с выделением текста). `Enter` — создать (вызов `IPlaylistRepository.Create(name)`), `Esc` — отменить. **Пустое/пробельное имя при `Enter` → создаётся с именем «Новый плейлист»** (не отмена).
 
 **Переименование (инлайн):** контекст-меню «Переименовать» на строке → та же строка переходит в режим редактирования с текущим именем. `Enter` — `Rename(id, name)`, `Esc` — отмена.
 
@@ -152,8 +154,8 @@ internal sealed class PlaylistTrackEntity
 
 **`SqlitePlaylistRepository`** поверх `Func<LibraryDbContext>` (как остальные репозитории). Работа с `Position`:
 - `AddTrack` — `Position = (max Position в плейлисте) + 1`, или 0 для пустого.
-- `RemoveAt` — удалить строку на позиции, декрементировать `Position` всех строк после неё (сжатие «дыры»).
-- `Reorder(from, to)` — вынуть строку, сдвинуть промежуток, переприсвоить `Position` подряд. Транзакция.
+- `RemoveAt` — удалить строку на позиции, декрементировать `Position` всех строк после неё (сжатие «дыры»). **Транзакция** — мутирует Position у потенциально многих строк; частичный сбой оставит дыру/дубликат позиций, поэтому та же атомарность, что у `Reorder`.
+- `Reorder(from, to)` — вынуть строку, сдвинуть промежуток, переприсвоить `Position` подряд. **Транзакция.**
 - `GetTracks` — JOIN `PlaylistTracks` → `Tracks` по `Position ASC`, маппинг в доменный `Track` (пробрасывать ВСЕ поля включая `IsBuiltIn/Year/TrackNumber/AlbumArtist/Rating/Reaction` — контрактный инвариант из прошлых итераций).
 
 **DI:** `IPlaylistRepository → SqlitePlaylistRepository` в `InfrastructureServiceCollectionExtensions`.
@@ -167,9 +169,17 @@ internal sealed class PlaylistTrackEntity
 
 Строки плейлистов в PlaylistsRoot: `ContextMenu` с **«Переименовать»** / **«Удалить»**.
 
-**Реализация:** WPF `ContextMenu` с `MenuItem`. Команды — на `MainViewModel`, источник через `PlacementTarget`/`RelativeSource` (ContextMenu вне визуального дерева окна — стандартная особенность; используем `Tag`/`PlacementTarget.DataContext` или `ContextMenu.DataContext`-проброс). Динамическое подменю плейлистов — `ItemsSource` на коллекцию плейлистов + `MenuItem` через `ItemContainerStyle`/`HierarchicalDataTemplate`, команда `AddSelectedToPlaylistCommand(playlistId)`.
+**Реализация — единый зафиксированный механизм** (не «или»):
 
-Команды `MainViewModel`: `CreatePlaylistCommand`, `RenamePlaylistCommand`, `DeletePlaylistCommand`, `OpenPlaylistCommand`, `PlayPlaylistCommand`, `ShufflePlaylistCommand`, `AddTrackToPlaylistCommand(playlist, track)`, `RemoveTrackFromPlaylistCommand(position)`, `PlayPlaylistTrackCommand(track)`.
+`ContextMenu` живёт вне визуального дерева окна, поэтому `RelativeSource AncestorType=Window` внутри него НЕ резолвится (известная точка отказа WPF). Используем канонический паттерн через `PlacementTarget`:
+
+1. Каждая строка-трек (Border/Grid шаблона) несёт `Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"` — то есть `Tag` = `MainViewModel`.
+2. `MenuItem`-ы внутри `ContextMenu` достают VM через `PlacementTarget.Tag`:
+   `Command="{Binding PlacementTarget.Tag.SomeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"`.
+3. **Целевой трек фиксируется явно, а не выводится из привязок.** По событию `ContextMenuOpening` строки вызывается `SetContextTargetCommand` (параметр — `Track` строки, или список выбранных при мульти-выборе), который сохраняет `_contextTargetTracks` в `PlaylistsViewModel`. Все пункты меню оперируют этим зафиксированным набором. Это убирает multi-binding-гимнастику (пункту «добавить» нужны и трек, и плейлист) и делает поведение тестируемым без WPF.
+4. **Динамическое подменю «Добавить в плейлист ▸»**: `MenuItem.ItemsSource = PlacementTarget.Tag.Playlists`, каждый под-`MenuItem` — `Header={Binding Name}`, `Command = AddContextTargetToPlaylistCommand`, `CommandParameter={Binding}` (сам `Playlist`). Команда добавляет зафиксированный `_contextTargetTracks` в переданный плейлист. Плюс статический пункт «Новый плейлист…» (создать + добавить).
+
+Команды: CRUD и мутация членства — на `PlaylistsViewModel` (см. §ViewModel); `OpenPlaylistCommand`/`PlayPlaylistCommand`/`ShufflePlaylistCommand`/`PlayPlaylistTrackCommand` — на `MainViewModel`. Строка-трек экспонирует `MainViewModel` в `Tag`; подменю плейлистов и context-target-команды идут к `MainViewModel.Playlists` (под-VM).
 
 ## Drag-and-drop
 
@@ -179,7 +189,9 @@ internal sealed class PlaylistTrackEntity
 1. **Добавление:** drag трека(ов) из любого списка → drop на строку плейлиста в PlaylistsRoot **или** в треклист открытого PlaylistDetail → `AddTracks(playlistId, ids)` в конец.
 2. **Reorder:** drag строки трека **внутри** PlaylistDetail → drop между строк → `Reorder(from, to)`.
 
-**Мульти-выбор:** списки треков переводятся в `SelectionMode=Extended` (Ctrl/Shift). Drag тащит весь выбор; drop добавляет все в порядке выбора.
+**Сиквенс (важно, урок D):** базовая DnD-механика выносится в **отдельную первую задачу-спайк** плана — drag-инициация + drop-таргет + reorder-вычисление в переиспользуемом attached-behaviour/helper, **с собственным smoke** (изолированная тест-сцена: список → drop/reorder, проверка что событие доходит и вычисляет правильную позицию), ДО того как на неё навешиваются CRUD, контекст-меню и мульти-выбор. Так баг в базовой механике всплывёт рано, а не из середины большой фичи.
+
+**Мульти-выбор:** списки треков переводятся в `SelectionMode=Extended` (Ctrl/Shift). Drag тащит весь выбор; drop добавляет все в порядке выбора. Мульти-выбор — слой ПОВЕРХ базовой механики (отдельная задача после спайка).
 
 **Механика (WPF):**
 - Инициация: `PreviewMouseLeftButtonDown` фиксирует точку + элемент; `PreviewMouseMove` при превышении `SystemParameters.MinimumHorizontal/VerticalDragDistance` запускает `DragDrop.DoDragDrop` с `DataObject` (список `Track`/track-id).
@@ -195,14 +207,28 @@ internal sealed class PlaylistTrackEntity
 - Двойной клик по треку в PlaylistDetail → `PlayPlaylistTrackCommand`: очередь = треки плейлиста, старт с кликнутого (по образцу `PlayDetailTrackCommand` для альбома/исполнителя).
 - Играющий трек подсвечивается в PlaylistDetail (как в AlbumDetail).
 
-## ViewModel
+## ViewModel — архитектурное решение: выносим `PlaylistsViewModel`
 
-`MainViewModel`:
-```csharp
-public IReadOnlyList<Playlist> Playlists { get; private set; }  // computed-кэш, рефреш при CRUD
-// команды из §Контекстное меню
-```
-`Playlists` пересчитывается при create/rename/delete и при первом обращении. Drill-down в PlaylistDetail строит `PlaylistView`(имя + треки через `GetTracks`) и кладёт в `CurrentLeftColumn`. При изменении содержимого открытого плейлиста (add/remove/reorder) — ре-резолв `CurrentLeftColumn` на свежий `PlaylistView` (по образцу фикса stale-drill-down из D, ApplyFilters-паттерн, но триггер — мутация плейлиста).
+`MainViewModel` — уже god-object на 1000+ строк, и до архитектурного hardening (`1.9.0`) ещё четыре итерации. Продолжать наваливать в него ещё 9 команд по инерции — накопление долга. **Решение (осознанное, а не default): плейлист-специфичное состояние и команды выносятся в отдельный делегирующий под-VM `PlaylistsViewModel`** — это первый практический шаг будущего разгруза `MainViewModel`, а не откладывание на `1.9.0`. Зафиксировано в ADR-0002.
+
+**Граница ответственности:**
+- **`PlaylistsViewModel`** (новый, `MusicLibrary/ViewModels/`) — владеет плейлист-специфичным:
+  - `IReadOnlyList<Playlist> Playlists` (computed-кэш, рефреш при CRUD).
+  - Инлайн-edit состояние (какой плейлист создаётся/переименовывается, черновик имени).
+  - CRUD-команды: `CreatePlaylistCommand`, `RenamePlaylistCommand`, `DeletePlaylistCommand`.
+  - Мутация членства: `AddTrackToPlaylistCommand`, `AddTracksToPlaylistCommand`, `RemoveTrackFromPlaylistCommand`, `ReorderCommand` (все через `IPlaylistRepository`).
+  - Построение `PlaylistView` для drill-down.
+  - Зависит от: `IPlaylistRepository`, `IConfirmationService`, `IClock`.
+- **`MainViewModel`** остаётся владельцем **глобального** (общего для всех вкладок), но делегирует плейлисты:
+  - Навигация/`CurrentLeftColumn`/`ActiveView`/нав-стек — общие для всех вкладок, остаются здесь.
+  - Playback (`_playbackQueue`, `PlayingTrack`) — остаётся здесь; `PlayPlaylist`/`ShufflePlaylist`/`PlayPlaylistTrack` живут в `MainViewModel` (трогают общую очередь), но берут данные из `PlaylistsViewModel`.
+  - `OpenPlaylistCommand` (drill-down) — в `MainViewModel` (пушит в общий нав-стек), строит `PlaylistView` через `PlaylistsViewModel`.
+  - Экспонирует под-VM: `public PlaylistsViewModel Playlists { get; }`.
+- **Взаимодействие с очередью:** чтобы `PlaylistsViewModel` не зависел от `MainViewModel`, playback вызывается через узкий интерфейс/колбэк (например `IPlaybackQueueController { void ReplaceQueueAndPlay(IReadOnlyList<Track>, bool shuffle); }`), реализуемый `MainViewModel`. Это же развязывает будущий вынос других под-VM.
+
+**Ре-резолв открытого плейлиста:** при изменении содержимого открытого плейлиста (add/remove/reorder) `CurrentLeftColumn` (если это `PlaylistDetail`) ре-резолвится на свежий `PlaylistView` (по образцу фикса stale-drill-down из D, но триггер — мутация плейлиста, а не смена фильтра).
+
+**План сиквенсит это первой задачей:** `PlaylistsViewModel` + `IPlaybackQueueController` + DI заводятся ДО навешивания команд/UI, чтобы граница была установлена сразу, а не рефакторилась потом.
 
 **Фильтры и плейлисты:** активный фильтр библиотеки (search/genre/rating/…) на содержимое плейлиста НЕ влияет (плейлист — явный ручной набор, не подмножество библиотечного фильтра). Это отличается от альбомов/исполнителей (там фильтр действует). Зафиксировать в scope-deviations.
 
@@ -235,8 +261,9 @@ public IReadOnlyList<Playlist> Playlists { get; private set; }  // computed-кэ
 ## Тестирование
 
 - **`SqlitePlaylistRepositoryTests`** (поверх in-memory SQLite): CRUD; `GetTracks` порядок по Position; `AddTrack`/`AddTracks` в конец; дубликаты (один трек дважды → две строки); `RemoveAt` + сжатие позиций; `Reorder` (вверх/вниз, границы); каскад — удаление трека из библиотеки убирает его из плейлистов, удаление плейлиста чистит связи; round-trip всех полей `Track` (включая `IsBuiltIn`/новые поля).
-- **ViewModel-тесты**: create/rename/delete обновляют `Playlists`; add/remove/reorder ре-резолвят открытый `PlaylistDetail`; `PlayPlaylistCommand` наполняет `_playbackQueue` не трогая `DisplayedTracks`; двойной клик по треку плейлиста стартует с позиции.
-- **DnD**: логику add/reorder вынести в тестируемый helper; unit-тесты на вычисление целевой позиции reorder и на сборку батча из мульти-выбора. Сам WPF-DnD (adorners/эффекты) — визуальный smoke.
+- **`PlaylistsViewModelTests`** (под-VM изолированно, без WPF, через фейки `IPlaylistRepository`/`IConfirmationService`/`IClock`): create/rename/delete обновляют `Playlists`; инлайн-edit состояние; пустое имя → «Новый плейлист»; add/remove/reorder вызывают репозиторий и ре-резолвят открытый `PlaylistView`; `_contextTargetTracks` фиксируется и используется командами меню. Тест под-VM в отрыве от `MainViewModel` — прямой профит от выноса (ADR-0002).
+- **`MainViewModel`-тесты**: `PlayPlaylistCommand`/`PlayPlaylistTrackCommand` наполняют `_playbackQueue` через `IPlaybackQueueController` не трогая `DisplayedTracks`; `OpenPlaylistCommand` пушит `PlaylistDetail` в нав-стек.
+- **DnD**: базовая механика (спайк-задача) — helper с unit-тестами на вычисление целевой позиции reorder и сборку батча из мульти-выбора + собственный изолированный interaction-smoke. Сам WPF-DnD (adorners/эффекты) — визуальный smoke.
 - **Переиспользуемый headless render-smoke** (новый, закрывает урок D): STA-тест, который поднимает `Application`, мёржит ресурс-словари приложения, инстанцирует каждый `LeftColumnState`-шаблон (Tracks/Albums/Artists/AlbumDetail/ArtistDetail/**PlaylistsRoot/PlaylistDetail**) с реальным `MainViewModel` на seed-данных, форсит Measure/Arrange и утверждает отсутствие исключений. Ловит `ResourceReferenceKeyNotFoundException` и подобные XAML-крэши в CI.
 - **Бенчмарк FTS** не должен просесть.
 
@@ -248,7 +275,9 @@ public IReadOnlyList<Playlist> Playlists { get; private set; }  // computed-кэ
 - Контекст-меню «Добавить в плейлист ▸» работает из всех списков треков; «Убрать из плейлиста» в PlaylistDetail.
 - DnD: добавление треков (в т.ч. мульти-выбор) перетаскиванием на плейлист/в треклист; reorder перетаскиванием внутри плейлиста с insertion-визуалом.
 - Дубликаты разрешены; каскад при удалении трека/плейлиста; порядок сохраняется между запусками.
-- Воспроизведение плейлиста через `_playbackQueue`, вкладка «Треки» не ломается.
+- Воспроизведение плейлиста через `_playbackQueue` (вызов из `PlaylistsViewModel` через `IPlaybackQueueController`), вкладка «Треки» не ломается.
+- Плейлист-логика (состояние + CRUD + членство) живёт в `PlaylistsViewModel`, а не в `MainViewModel` (ADR-0002); граница установлена первой задачей плана.
+- Базовая DnD-механика реализована и покрыта smoke отдельной первой задачей ДО навешивания CRUD/меню/мульти-выбора.
 - Апгрейд с 1.0.4: миграция `AddPlaylists` накатывается без потери данных.
-- Существующие 253 теста проходят + новые (репозиторий, ViewModel, render-smoke); render-smoke-харнесс переиспользуем в CI.
+- Существующие 253 теста проходят + новые (`SqlitePlaylistRepositoryTests`, `PlaylistsViewModelTests`, DnD-helper, render-smoke); render-smoke-харнесс переиспользуем в CI.
 - Build чистый; ручной smoke пройден.
