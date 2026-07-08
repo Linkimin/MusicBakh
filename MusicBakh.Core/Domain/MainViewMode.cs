@@ -5,5 +5,6 @@ public enum MainViewMode
 {
     Tracks = 0,
     Albums = 1,
-    Artists = 2
+    Artists = 2,
+    Playlists = 3
 }
