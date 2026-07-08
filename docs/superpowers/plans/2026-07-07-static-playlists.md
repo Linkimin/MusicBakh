@@ -4,7 +4,9 @@
 
 **Goal:** Реализовать спек [`docs/superpowers/specs/2026-07-07-static-playlists-design.md`](../specs/2026-07-07-static-playlists-design.md) — четвёртый вид «Плейлисты» со статическими (ручными) плейлистами: CRUD, добавление через контекст-меню + drag-and-drop, reorder, воспроизведение.
 
-**Architecture:** Плейлист-логика выносится в отдельный под-VM `PlaylistsViewModel` (первый шаг разгруза `MainViewModel`, см. [ADR-0002](../../adr/0002-extract-playlists-viewmodel.md)); воспроизведение вызывается через узкий `IPlaybackQueueController`, реализуемый `MainViewModel`. Хранение — таблицы `Playlists` + `PlaylistTracks(Id, PlaylistId, TrackId, Position)` через EF Core, дубликаты разрешены, каскад по FK. UI переиспускает механику вкладок + drill-down итерации D (`MainViewMode`, `LeftColumnState`, `LeftColumnTemplateSelector`, `ContentControl`).
+**Architecture:** Плейлист-логика выносится в отдельный под-VM `PlaylistsViewModel` (первый шаг разгруза `MainViewModel`, см. [ADR-0002](../../adr/0002-extract-playlists-viewmodel.md)): под-VM владеет состоянием + CRUD + членством, `MainViewModel` остаётся владельцем навигации и очереди воспроизведения (playback-команды плейлиста физически в `MainViewModel`, данные берут из под-VM). Синхронизация открытой детали при мутации — через событие `PlaylistsViewModel.PlaylistContentChanged`, на которое `MainViewModel` подписывается один раз. Хранение — таблицы `Playlists` + `PlaylistTracks(Id, PlaylistId, TrackId, Position)` через EF Core, дубликаты разрешены, каскад по FK. UI переиспускает механику вкладок + drill-down итерации D (`MainViewMode`, `LeftColumnState`, `LeftColumnTemplateSelector`, `ContentControl`).
+
+> **Отложено (не в скоупе E):** интерфейс `IPlaybackQueueController`. Он вводится только когда под-VM реально понадобится самому инициировать playback; в E воспроизведение плейлиста живёт в `MainViewModel` (там же очередь и навигация), поэтому шов без потребителя не создаётся (YAGNI — см. ADR-0002, раздел Consequences).
 
 **Tech Stack:** .NET 10, WPF, C# 14, EF Core 10 SQLite, xUnit. Никаких новых NuGet-зависимостей.
 
@@ -24,18 +26,17 @@
 
 ---
 
-## Task 1: Абстракции — `Playlist`, `PlaylistView`, `IPlaylistRepository`, `IPlaybackQueueController`
+## Task 1: Абстракции — `Playlist`, `IPlaylistRepository`
 
-Чистые доменные типы и интерфейсы. Компилируется, реализаций нет.
+Чистые доменные типы и интерфейсы. Компилируется, реализаций нет. (`PlaylistView` — UI-DTO в Presentation, создаётся в Task 4.)
 
 **Files:**
 - Create: `MusicBakh.Core/Domain/Playlist.cs`
 - Modify: `MusicBakh.Core/Domain/MainViewMode.cs`
 - Create: `MusicBakh.Core/Abstractions/IPlaylistRepository.cs`
-- Create: `MusicBakh.Application/Abstractions/IPlaybackQueueController.cs`
 
 **Interfaces:**
-- Produces: `Playlist(int Id, string Name, DateTime CreatedAtUtc)`; `MainViewMode.Playlists = 3`; `IPlaylistRepository` (сигнатуры ниже); `IPlaybackQueueController.ReplaceQueueAndPlay(IReadOnlyList<Track>, bool, Track?)`.
+- Produces: `Playlist(int Id, string Name, DateTime CreatedAtUtc)`; `MainViewMode.Playlists = 3`; `IPlaylistRepository` (сигнатуры ниже).
 
 - [ ] **Step 1: `Playlist` domain record**
 
@@ -80,35 +81,16 @@ public interface IPlaylistRepository
 }
 ```
 
-- [ ] **Step 4: `IPlaybackQueueController`**
-
-`MusicBakh.Application/Abstractions/IPlaybackQueueController.cs`:
-```csharp
-using MusicBakh.Core.Domain;
-
-namespace MusicBakh.Application.Abstractions;
-
-/// <summary>
-/// Узкий шов к очереди воспроизведения. Позволяет под-VM (PlaylistsViewModel) запускать
-/// воспроизведение набора треков, не завися от MainViewModel напрямую (ADR-0002).
-/// </summary>
-public interface IPlaybackQueueController
-{
-    /// <summary>Заменяет очередь воспроизведения и стартует. selectedTrack — с какого начать (null = первый).</summary>
-    void ReplaceQueueAndPlay(IReadOnlyList<Track> tracks, bool shuffle, Track? selectedTrack = null);
-}
-```
-
-- [ ] **Step 5: Build**
+- [ ] **Step 4: Build**
 
 Run: `dotnet build MusicLibrary.sln --nologo`
 Expected: `Build succeeded. 0 Warning(s) 0 Error(s)`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add MusicBakh.Core MusicBakh.Application
-git commit -m "feat(core): playlist domain + IPlaylistRepository + IPlaybackQueueController abstractions"
+git add MusicBakh.Core
+git commit -m "feat(core): playlist domain + IPlaylistRepository abstraction"
 ```
 
 ---
@@ -554,7 +536,7 @@ git commit -m "feat(infra): SqlitePlaylistRepository with position ordering + tr
 
 ## Task 4: `PlaylistsViewModel` + `MainViewModel` интеграция (границы, нав, playback)
 
-Устанавливает границу ADR-0002. `PlaylistsViewModel` владеет плейлист-состоянием и командами; `MainViewModel` реализует `IPlaybackQueueController`, экспонирует под-VM, добавляет вид/навигацию/воспроизведение плейлиста.
+Устанавливает границу ADR-0002. `PlaylistsViewModel` владеет плейлист-состоянием, CRUD и членством; `MainViewModel` экспонирует под-VM, добавляет вид/навигацию/воспроизведение плейлиста и подписывается на событие `PlaylistContentChanged` для ре-резолва открытой детали.
 
 **Files:**
 - Create: `MusicLibrary/ViewModels/PlaylistsViewModel.cs`
@@ -566,8 +548,8 @@ git commit -m "feat(infra): SqlitePlaylistRepository with position ordering + tr
 - Create: `MusicLibrary.Tests/ViewModels/PlaylistsViewModelTests.cs`
 
 **Interfaces:**
-- Consumes: `IPlaylistRepository`, `IConfirmationService`, `IClock` (Task 1/3); `IPlaybackQueueController` (Task 1).
-- Produces: `PlaylistView(Playlist, IReadOnlyList<Track>)` с `TotalDuration`; `LeftColumnState.PlaylistsRoot`, `LeftColumnState.PlaylistDetail(PlaylistView)`; `PlaylistsViewModel` (свойства/команды ниже); `MainViewModel.Playlists` (под-VM), `MainViewModel.OpenPlaylistCommand`, `PlayPlaylistCommand`, `ShufflePlaylistCommand`, `PlayPlaylistTrackCommand`; `MainViewModel : IPlaybackQueueController`.
+- Consumes: `IPlaylistRepository`, `IConfirmationService`, `IClock` (Task 1/3).
+- Produces: `PlaylistView(Playlist, IReadOnlyList<Track>)` с `TotalDuration`; `LeftColumnState.PlaylistsRoot`, `LeftColumnState.PlaylistDetail(PlaylistView)`; `PlaylistsViewModel` (свойства/команды/событие `PlaylistContentChanged` ниже); `MainViewModel.Playlists` (под-VM), `MainViewModel.OpenPlaylistCommand`, `PlayPlaylistCommand`, `ShufflePlaylistCommand`, `PlayPlaylistTrackCommand`.
 
 - [ ] **Step 1: `PlaylistView` DTO**
 
@@ -678,7 +660,8 @@ public sealed class PlaylistsViewModelTests
     }
 }
 ```
-(Публичный контракт VM, который надо реализовать: `Playlists`, `RefreshPlaylists()`, `ConfirmNewPlaylistName(string)`, `SetContextTarget(IReadOnlyList<Track>)`, `AddContextTargetToPlaylist(Playlist)`. Команды — обёртки над этими методами.)
+(Публичный контракт VM, который надо реализовать: `Playlists`, `RefreshPlaylists()`, `ConfirmNewPlaylistName(string)`, `SetContextTarget(IReadOnlyList<Track>)`, `AddContextTargetToPlaylist(Playlist)`, `AddTracksByIds(int, IReadOnlyList<int>)`, `RemoveTrackAt(int,int)`, `Reorder(int,int,int)`, `BuildView(int)`, событие `PlaylistContentChanged`. Команды — обёртки над этими методами.)
+> Осторожно с `FakePlaylistRepo`: его `RemoveAt`/`Reorder` бросят на выходе за границы, тогда как реальный `SqlitePlaylistRepository` тихо возвращается (guard). Если добавляешь VM-тест на некорректную позицию — либо повтори guard в фейке, либо тестируй этот кейс на реальном репозитории (Task 3), а не через фейк.
 
 - [ ] **Step 5: Run — FAIL**
 
@@ -772,21 +755,29 @@ public sealed class PlaylistsViewModel : ViewModelBase
         if (_contextTarget.Count == 0) return;
         _repo.AddTracks(p.Id, _contextTarget.Select(t => t.Id).ToList());
         RefreshPlaylists();
-        MutatedPlaylistId = p.Id;   // сигнал MainViewModel'у ре-резолвить открытую деталь
+        PlaylistContentChanged?.Invoke(p.Id);
+    }
+
+    public void AddTracksByIds(int playlistId, IReadOnlyList<int> ids)
+    {
+        if (ids.Count == 0) return;
+        _repo.AddTracks(playlistId, ids);
+        RefreshPlaylists();
+        PlaylistContentChanged?.Invoke(playlistId);
     }
 
     public void RemoveTrackAt(int playlistId, int position)
     {
         _repo.RemoveAt(playlistId, position);
         RefreshPlaylists();
-        MutatedPlaylistId = playlistId;
+        PlaylistContentChanged?.Invoke(playlistId);
     }
 
     public void Reorder(int playlistId, int from, int to)
     {
         _repo.Reorder(playlistId, from, to);
         RefreshPlaylists();
-        MutatedPlaylistId = playlistId;
+        PlaylistContentChanged?.Invoke(playlistId);
     }
 
     public PlaylistView BuildView(int playlistId)
@@ -795,18 +786,23 @@ public sealed class PlaylistsViewModel : ViewModelBase
         return new PlaylistView(pl, _repo.GetTracks(playlistId));
     }
 
-    /// <summary>Id плейлиста, чьё содержимое последний раз изменилось (для ре-резолва открытой детали). null = нет.</summary>
-    public int? MutatedPlaylistId { get; set; }
+    /// <summary>
+    /// Поднимается после любой мутации содержимого плейлиста (add/remove/reorder) с его Id.
+    /// MainViewModel подписывается один раз в конструкторе и, если открыта деталь именно этого
+    /// плейлиста, пересобирает её. Событие вместо мутабельного poll-флага — надёжнее: нельзя
+    /// «забыть» вызвать ре-резолв в новой команде.
+    /// </summary>
+    public event System.Action<int>? PlaylistContentChanged;
 }
 ```
+> `AddTracksByIds` здесь же (нужен для DnD-drop в Task 8) — чтобы вся мутация членства и подъём события жили в под-VM, а не размазывались по `MainViewModel`.
 
-- [ ] **Step 7: `MainViewModel` — `IPlaybackQueueController`, под-VM, навигация, воспроизведение**
+- [ ] **Step 7: `MainViewModel` — под-VM, навигация, воспроизведение**
 
-В `MainViewModel.cs`:
-1. Класс реализует интерфейс: `public sealed class MainViewModel : ViewModelBase, IDisposable, IPlaybackQueueController`. Метод `ReplaceQueueAndPlay(IReadOnlyList<Track>, bool, Track?)` уже существует как private — сделать его **public** (реализация интерфейса), сигнатуру не менять.
-2. В конструктор добавить параметр `PlaylistsViewModel? playlists = null` (в конец списка опциональных); сохранить в поле `_playlists` и экспонировать `public PlaylistsViewModel Playlists => _playlists!;`. Если `null` (старые тесты) — команды плейлистов no-op-guard'ятся.
-3. `SwitchViewCommand`: добавить в `switch` ветку `MainViewMode.Playlists => new LeftColumnState.PlaylistsRoot(),`.
-4. Новые команды (регистрировать в конструкторе рядом с `OpenAlbumCommand`):
+В `MainViewModel.cs` (класс НЕ реализует `IPlaybackQueueController` — его в E нет; playback-команды плейлиста в самом `MainViewModel` вызывают существующий приватный `ReplaceQueueAndPlay` напрямую, сигнатуру не меняя):
+1. В конструктор добавить параметр `PlaylistsViewModel? playlists = null` (в конец списка опциональных); сохранить в поле `_playlists` и экспонировать `public PlaylistsViewModel Playlists => _playlists!;`. Если `null` (старые тесты) — команды плейлистов no-op-guard'ятся. Если не `null` — подписаться на событие (см. п.5).
+2. `SwitchViewCommand`: добавить в `switch` ветку `MainViewMode.Playlists => new LeftColumnState.PlaylistsRoot(),`.
+3. Новые команды (регистрировать в конструкторе рядом с `OpenAlbumCommand`):
 ```csharp
 OpenPlaylistCommand = new RelayCommand(p =>
 {
@@ -832,23 +828,28 @@ PlayPlaylistTrackCommand = new RelayCommand(p =>
 });
 ```
 С полями-свойствами `public ICommand OpenPlaylistCommand { get; }` и т.д.
-5. **Ре-резолв открытой детали при мутации:** после операций под-VM, меняющих содержимое (add/remove/reorder), вызывать хелпер:
+4. **Ре-резолв открытой детали — через подписку на событие (один раз в конструкторе):**
 ```csharp
-private void ResolveMutatedPlaylist()
+// в конструкторе, если _playlists is not null:
+_playlists.PlaylistContentChanged += OnPlaylistContentChanged;
+```
+```csharp
+// обработчик: если открыта деталь именно этого плейлиста — пересобрать её
+private void OnPlaylistContentChanged(int playlistId)
 {
-    if (_playlists?.MutatedPlaylistId is not int id) return;
-    _playlists.MutatedPlaylistId = null;
-    if (_currentLeftColumn is LeftColumnState.PlaylistDetail d && d.Playlist.Playlist.Id == id)
-        CurrentLeftColumn = new LeftColumnState.PlaylistDetail(_playlists.BuildView(id));
+    if (_currentLeftColumn is LeftColumnState.PlaylistDetail d && d.Playlist.Playlist.Id == playlistId)
+        CurrentLeftColumn = new LeftColumnState.PlaylistDetail(_playlists!.BuildView(playlistId));
 }
 ```
-Вызывать `ResolveMutatedPlaylist()` из команд, которые дергают под-VM-мутацию (add-to-playlist из контекст-меню Task 7, remove/reorder Task 7/8). Для Task 4 достаточно завести метод и вызвать его в `AddTrackToPlaylistCommand`-обёртке (см. Task 7); здесь — только определить.
+В `Dispose()` отписаться: `if (_playlists is not null) _playlists.PlaylistContentChanged -= OnPlaylistContentChanged;`.
+Это заменяет ручной poll-флаг: команды add/remove/reorder (Task 7/8) НЕ должны сами звать ре-резолв — под-VM поднимает событие, `MainViewModel` реагирует автоматически.
 
 - [ ] **Step 8: DI**
 
 В `PresentationServiceCollectionExtensions.cs`:
-- Зарегистрировать под-VM: `services.AddSingleton<PlaylistsViewModel>();`
-- `MainViewModel` резолвится (проверь текущую регистрацию — если он `AddSingleton<MainViewModel>()` или резолвится в MainWindow). Прокинуть `PlaylistsViewModel` в конструктор `MainViewModel` (через DI — параметр опциональный, DI подставит зарегистрированный). Если `MainWindow` собирает VM вручную — добавить аргумент там. `IPlaybackQueueController` для под-VM: под-VM его НЕ требует напрямую (playback команд плейлиста живут в MainViewModel), поэтому отдельная регистрация `IPlaybackQueueController → MainViewModel` не нужна для Task 4; она понадобится, только если под-VM начнёт сам инициировать playback. Оставить `MainViewModel` реализующим интерфейс для будущего.
+- Зарегистрировать под-VM: `services.AddSingleton<PlaylistsViewModel>();` (singleton — состояние плейлистов живёт всю сессию, как и `MainViewModel`).
+- `MainViewModel` резолвится (проверь текущую регистрацию — `AddSingleton<MainViewModel>()` или ручная сборка в `MainWindow`). Прокинуть `PlaylistsViewModel` в конструктор `MainViewModel` (через DI — параметр опциональный, DI подставит зарегистрированный singleton). Если `MainWindow` собирает VM вручную — добавить аргумент там.
+- Никакой регистрации `IPlaybackQueueController` — интерфейс в E не вводится (см. заметку в шапке плана / ADR-0002).
 
 - [ ] **Step 9: Run VM-тесты — PASS**
 
@@ -864,7 +865,7 @@ Expected: 0/0, 262 passed (259 + 3). Существующие `MainViewModelTest
 
 ```bash
 git add MusicLibrary MusicLibrary.Tests
-git commit -m "feat(playlists): PlaylistsViewModel sub-VM + MainViewModel nav/playback + IPlaybackQueueController (ADR-0002)"
+git commit -m "feat(playlists): PlaylistsViewModel sub-VM + MainViewModel nav/playback (ADR-0002)"
 ```
 
 ---
@@ -905,8 +906,21 @@ public sealed class ReorderMathTests
     {
         Assert.Equal(expected, ReorderMath.TargetIndex(y, Tops, Heights));
     }
+
+    // AdjustForRemoval: сырой индекс вставки (относительно ДО удаления source) → toPosition для Reorder,
+    // который удаляет source ПЕРЕД вставкой. При движении вниз всё между source и точкой сдвигается на 1.
+    [Theory]
+    [InlineData(0, 2, 1)]   // A(0) роняем «между B и C» (raw=2) → ожидаем B,A,C → to=1
+    [InlineData(0, 1, 0)]   // A(0) роняем на место B (raw=1) → to=0 (никуда не двинулся визуально)
+    [InlineData(2, 0, 0)]   // C(2) роняем в начало (raw=0) → движение вверх, поправки нет → to=0
+    [InlineData(1, 2, 1)]   // B(1) роняем «между B и C» (raw=2) → to=1 (стоит на месте)
+    public void AdjustForRemoval_Compensates_Downward_Shift(int from, int raw, int expected)
+    {
+        Assert.Equal(expected, ReorderMath.AdjustForRemoval(raw, from));
+    }
 }
 ```
+> Именно этот off-by-one невидим для build/unit прочих слоёв и проявился бы только визуально при DnD-reorder вниз — поэтому вынесен в чистую функцию с тестом, а не оставлен инлайн-логикой в behaviour (Task 8).
 
 - [ ] **Step 2: Run — FAIL**
 
@@ -940,6 +954,16 @@ public static class ReorderMath
         }
         return count - 1;
     }
+
+    /// <summary>
+    /// Преобразует «сырой» индекс вставки (посчитанный <see cref="TargetIndex"/> относительно списка
+    /// ДО удаления перетаскиваемого элемента) в <c>toPosition</c> для <c>IPlaylistRepository.Reorder</c>,
+    /// который сначала удаляет элемент из <paramref name="fromPosition"/>, а потом вставляет. При движении
+    /// вниз (<paramref name="rawTarget"/> &gt; <paramref name="fromPosition"/>) удаление source сдвигает
+    /// все последующие на одну позицию — поэтому вычитаем 1. Движение вверх коррекции не требует.
+    /// </summary>
+    public static int AdjustForRemoval(int rawTarget, int fromPosition)
+        => rawTarget > fromPosition ? rawTarget - 1 : rawTarget;
 }
 ```
 
@@ -1005,9 +1029,9 @@ public static class DragDropListHelper
 - [ ] **Step 5: Run — PASS**
 
 Run: `dotnet test MusicLibrary.Tests/MusicLibrary.Tests.csproj --filter "ReorderMathTests" --nologo`
-Expected: 3 passed.
+Expected: 7 passed (3 `TargetIndex` + 4 `AdjustForRemoval` кейса).
 
-- [ ] **Step 6: Изолированный interaction-smoke** (headless: собрать `ListBox` с `DragDropListHelper`, программно проверить `ShouldBeginDrag` порог и `MakeData/TryGetTrackIds` round-trip — без реального WPF-drag)
+- [ ] **Step 6: Unit-покрытие DataObject round-trip** (чистая часть helper'а)
 
 Добавить в `ReorderMathTests.cs` (или отдельный `DragDropListHelperTests.cs`):
 ```csharp
@@ -1019,11 +1043,12 @@ public void DataObject_RoundTrips_Track_Ids()
     Assert.Equal(new[] { 3, 7, 9 }, ids);
 }
 ```
+> **Честно про покрытие:** юнит-тестами покрыты только чистые части — `ReorderMath` (геометрия + `AdjustForRemoval`) и `MakeData`/`TryGetTrackIds` (сериализация). Мышиный порог `ArmDrag`/`ShouldBeginDrag` завязан на живой `MouseEventArgs`/`InputDevice`, который headless не сконструировать корректно, поэтому он проверяется **только визуальным smoke** (Task 10), а не автотестом. Это осознанный предел, а не «покрыто».
 
 - [ ] **Step 7: Build + суите**
 
 Run: `dotnet build MusicLibrary.sln --nologo && dotnet test MusicLibrary.Tests/MusicLibrary.Tests.csproj --filter "Category!=Benchmark" --nologo`
-Expected: 0/0, 266 passed (262 + 4).
+Expected: 0/0, ~270 passed (262 + 8: 7 ReorderMath + 1 round-trip). Точное число — иллюстративно, важно что все зелёные.
 
 - [ ] **Step 8: Commit**
 
@@ -1051,6 +1076,7 @@ git commit -m "feat(dnd): reusable drag-init + drop helper + reorder math (spike
   - `PlaylistRowTemplate` — строка плейлиста: имя (`{Binding Name}`), «N треков» (если хранишь счётчик — иначе только имя; счётчик можно опустить в MVP-строке или вычислять в под-VM), `Cursor=Hand`, `Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"`. Левый клик (`MouseBinding LeftClick`) → `OpenPlaylistCommand` через `AncestorType=Window`, `CommandParameter={Binding}` (сам `Playlist`). `ContextMenu` — в Task 7.
   - `PlaylistsRootTemplate` — `ItemsControl ItemsSource="{Binding DataContext.Playlists.Playlists, RelativeSource={RelativeSource AncestorType=Window}}"` со `StackPanel` в `ItemsPanel`; сверху `Button Content="+ Новый плейлист"` → `DataContext.Playlists.StartNewPlaylistCommand`; empty-state «Плейлистов пока нет — создайте первый» через `CountToVisibilityConverter(Invert)` по `Playlists.Playlists.Count`. Инлайн-edit строки создания — см. Step 2.
   - `PlaylistDetailTemplate` — зеркало `AlbumDetailTemplate`: «← Все плейлисты» → `BackCommand`; header (`{Binding Playlist.Playlist.Name}`, `Playlist.Tracks.Count` треков, `Playlist.TotalDuration`); кнопки «▶ Воспроизвести»/«🔀 Перемешать» → `PlayPlaylistCommand`/`ShufflePlaylistCommand` с `CommandParameter="{Binding Playlist}"` (это `PlaylistView`); `ListBox ItemsSource="{Binding Playlist.Tracks}"` с `ItemContainerStyle="{StaticResource TrackListBoxItemStyle}"`, строки `№/Название/Длительность`, подсветка играющего (тот же `DataTrigger` + `MultiBinding TrackIdentityMatchConverter` + `PlayingTrack` через `AncestorType=Window`, как в AlbumDetail), двойной клик → `PlayPlaylistTrackCommand` (`AncestorType=Window`, `CommandParameter={Binding}`); empty-state «В плейлисте пока нет треков — добавьте их через правый клик или перетаскиванием».
+    - **ОБЯЗАТЕЛЬНО** на этом `ListBox`: `AlternationCount="{Binding Playlist.Tracks.Count}"` — иначе `AlternationIndex`, по которому Task 7 удаляет строку из плейлиста, будет 0 у всех строк (дефолт `AlternationCount=0`) либо циклиться, и «Убрать из плейлиста» удалит не тот трек при дубликатах. Номер трека в строке тоже удобно рендерить из `(ItemsControl.AlternationIndex)+1`.
 
   **Полный XAML** сгенерировать по образцу `AlbumsArtistsTemplates.xaml` с указанными привязками. (Приёмка — build + render-smoke Task 9; визуал — Task 10.)
 
@@ -1096,45 +1122,68 @@ git commit -m "feat(ui): Playlists tab + PlaylistsRoot/PlaylistDetail templates 
 ## Task 7: Контекст-меню (первое в приложении)
 
 **Files:**
+- Create: `MusicLibrary/Behaviors/ContextSelection.cs` (чистый выбор треков)
+- Create: `MusicLibrary/Behaviors/TrackContextMenuBehavior.cs` (attached-захват контекст-таргета)
+- Create: `MusicLibrary.Tests/Behaviors/ContextSelectionTests.cs`
 - Modify: `MusicLibrary/Resources/TrackTemplates.xaml` (ContextMenu на карточке трека)
 - Modify: `MusicLibrary/Resources/AlbumsArtistsTemplates.xaml` (ContextMenu на строках треков в детали)
 - Modify: `MusicLibrary/Resources/PlaylistsTemplates.xaml` (ContextMenu на строке плейлиста + треке плейлиста)
-- Modify: `MusicLibrary/ViewModels/MainViewModel.cs` (команды-обёртки + SetContextTarget + ResolveMutatedPlaylist вызовы)
-- Modify: `MusicLibrary/ViewModels/PlaylistsViewModel.cs` (RenamePlaylist inline trigger, если ещё не)
+- Modify: `MusicLibrary/ViewModels/MainViewModel.cs` (команды `AddContextToPlaylistCommand`, `RemovePlaylistTrackCommand`)
 
 **Interfaces:**
-- Consumes: `PlaylistsViewModel.Playlists`, `AddContextTargetToPlaylistCommand`, `SetContextTarget`, `DeletePlaylistCommand`, `RemoveTrackAt` (Task 4); `MainViewModel.Playlists`.
-- Produces: контекст-меню «Добавить в плейлист ▸» на всех трек-строках; «Убрать из плейлиста» в PlaylistDetail; «Переименовать»/«Удалить» на строке плейлиста.
+- Consumes: `PlaylistsViewModel.Playlists`, `SetContextTarget`, `AddContextTargetToPlaylist`, `RemoveTrackAt`, `DeletePlaylistCommand`, `StartNewPlaylistCommand` (Task 4); `MainViewModel.Playlists`; событие `PlaylistContentChanged` (авто ре-резолв — Task 4).
+- Produces: `ContextSelection.Resolve` (чистый); `TrackContextMenuBehavior.Attach` (attached); контекст-меню «Добавить в плейлист ▸» на всех трек-строках; «Убрать из плейлиста» в PlaylistDetail; «Переименовать»/«Удалить» на строке плейлиста.
 
-- [ ] **Step 1: Команды-мосты в `MainViewModel`** (контекст-таргет + add + remove + re-resolve)
+- [ ] **Step 1: Команды-мосты в `MainViewModel`** (add + remove; ре-резолв — автоматически через событие из Task 4)
 
-Добавить команды, которые фиксируют таргет и делегируют под-VM, затем ре-резолвят открытую деталь:
+Add/Remove делегируют под-VM; ре-резолв открытой детали НЕ вызывается вручную — под-VM поднимает `PlaylistContentChanged`, обработчик из Task 4 сам пересобирает деталь.
 ```csharp
-// Зафиксировать трек(и), по которым открыто меню. Параметр — Track (одиночный) или список (мульти, Task 8).
-SetContextTrackCommand = new RelayCommand(p =>
-{
-    if (_playlists is null) return;
-    if (p is Track t) _playlists.SetContextTarget(new[] { t });
-});
+// Добавить зафиксированный контекст-таргет в выбранный плейлист. p — целевой Playlist (из подменю).
 AddContextToPlaylistCommand = new RelayCommand(p =>
 {
     if (_playlists is null || p is not Playlist pl) return;
-    _playlists.AddContextTargetToPlaylist(pl);
-    ResolveMutatedPlaylist();
+    _playlists.AddContextTargetToPlaylist(pl);   // событие → авто ре-резолв
 });
+// Убрать строку из открытого плейлиста ПО ПОЗИЦИИ (не по Id — иначе при дубликатах удалит не ту).
 RemovePlaylistTrackCommand = new RelayCommand(p =>
 {
     if (_playlists is null || _currentLeftColumn is not LeftColumnState.PlaylistDetail d) return;
-    if (p is not int position) return;
+    if (p is not int position) return;   // int из AlternationIndex через IntFromAlternationConverter, см. Step 3
     _playlists.RemoveTrackAt(d.Playlist.Playlist.Id, position);
-    ResolveMutatedPlaylist();
 });
 ```
-(`RemovePlaylistTrackCommand` берёт позицию строки — прокинуть через `CommandParameter` индекс из шаблона, либо принимать `Track` и вычислять позицию как первый матч по Id; проще — принимать `Track` и делать `d.Playlist.Tracks.IndexOf`… но дубликаты! Поэтому передавать именно позицию: в шаблоне треклиста плейлиста использовать `AlternationIndex` или пробрасывать индекс. Для MVP — передавать `Track`, удалять первую позицию с этим Id; ограничение задокументировать. Уточнение фиксируется при реализации, но по умолчанию: **передавать позицию через `ItemsControl.AlternationIndex`**.)
+Фиксацию «на каком треке открыто меню» делает не команда, а attached-behaviour из Step 2 (он зовёт `_playlists.SetContextTarget(...)` при открытии меню). Поэтому отдельного `SetContextTrackCommand` нет.
 
-- [ ] **Step 2: ContextMenu XAML на трек-строке** (паттерн, применить в TrackCardTemplate + album/artist/playlist трек-строках)
+- [ ] **Step 2: Захват контекст-таргета — конкретный `TrackContextMenuBehavior` + чистый `ContextSelection`**
 
-На корневом элементе строки (`Border`/`Grid`) — `Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"` и:
+Механизм фиксируется здесь однозначно (не «решим в моменте»). Две части:
+
+**(а) Чистый тестируемый выбор** — `MusicLibrary/Behaviors/ContextSelection.cs`:
+```csharp
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using MusicBakh.Core.Domain;
+
+namespace MusicLibrary.Behaviors;
+
+/// <summary>Определяет набор треков для операции по правому клику: если кликнутая строка входит
+/// в мульти-выделение (&gt;1) — берём всё выделение; иначе — только кликнутый трек.</summary>
+public static class ContextSelection
+{
+    public static IReadOnlyList<Track> Resolve(IList? selectedItems, Track clicked)
+    {
+        if (selectedItems is null) return new[] { clicked };
+        var tracks = selectedItems.OfType<Track>().ToList();
+        return tracks.Count > 1 && tracks.Contains(clicked) ? tracks : new List<Track> { clicked };
+    }
+}
+```
+Тест `ContextSelectionTests` (3 кейса): null-выделение → [clicked]; кликнут вне выделения → [clicked]; кликнут внутри мульти → всё выделение.
+
+**(б) Attached-behaviour, навешивающий захват** — `MusicLibrary/Behaviors/TrackContextMenuBehavior.cs`, attached-свойство `bool Attach`. При `true` на строке (`FrameworkElement`) подписывает `ContextMenuOpening`; в обработчике: берёт VM из `fe.Tag` (строка уже несёт `Tag = MainViewModel` для `PlacementTarget.Tag`), `Track` из `fe.DataContext`, поднимается по дереву до `ItemsControl`/`ListBox` за `SelectedItems`, вызывает `vm.Playlists.SetContextTarget(ContextSelection.Resolve(selected, track))`. Событийная привязка (WPF-glue) не юнит-тестится — покрыта визуальным smoke (Task 10); вся ветвящаяся логика вынесена в `ContextSelection` (а).
+
+**(в) Само меню** (на корне строки — `Border`/`Grid`), `Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"` + `behaviors:TrackContextMenuBehavior.Attach="True"`:
 ```xml
 <Border.ContextMenu>
     <ContextMenu>
@@ -1154,9 +1203,8 @@ RemovePlaylistTrackCommand = new RelayCommand(p =>
     </ContextMenu>
 </Border.ContextMenu>
 ```
-Фиксация контекст-таргета: у `ContextMenu` обработчик `Opened` (или у строки `ContextMenuOpening`) → вызвать `SetContextTrackCommand` с `Track` строки. Реализовать через `EventSetter`/attached-behaviour или code-behind-хелпер; в шаблоне — `CommandParameter={Binding}` строки. (Паттерн: `ContextMenuOpening="OnTrackContextMenuOpening"` на строке в code-behind ставит `vm.SetContextTrackCommand.Execute(track)` — но code-behind у DataTemplate нет; используем attached-behaviour `ContextTargetBehavior` или `ContextMenu.Opened` с `PlacementTarget.DataContext`. Финальный механизм — attached-behaviour, объявить в `MusicLibrary/Behaviors/`.)
 
-- [ ] **Step 3: «Убрать из плейлиста»** — в трек-строке `PlaylistDetailTemplate` добавить пункт `MenuItem Header="Убрать из плейлиста"` → `RemovePlaylistTrackCommand`, параметр — позиция (AlternationIndex).
+- [ ] **Step 3: «Убрать из плейлиста»** — в трек-строке `PlaylistDetailTemplate` добавить `MenuItem Header="Убрать из плейлиста"` → `RemovePlaylistTrackCommand`, `CommandParameter` = позиция строки из `(ItemsControl.AlternationIndex)` (требует `AlternationCount`, выставленный в Task 6). `AlternationIndex` — `int`, `RelayCommand` получит его как boxed `int` (совпадает с `p is int position`). Опирается на гарантию из Task 6, что `AlternationCount="{Binding Playlist.Tracks.Count}"`.
 
 - [ ] **Step 4: ContextMenu на строке плейлиста** (`PlaylistRowTemplate`): «Переименовать» (переводит строку в инлайн-edit) / «Удалить» → `DeletePlaylistCommand`.
 
@@ -1165,7 +1213,7 @@ RemovePlaylistTrackCommand = new RelayCommand(p =>
 Run: `dotnet build MusicLibrary.sln --nologo`
 Expected: 0 errors.
 
-- [ ] **Step 6: Тесты VM-команд** (add/remove через контекст-таргет уже покрыты `PlaylistsViewModelTests` из Task 4; добавить тест на `MainViewModel.AddContextToPlaylistCommand` end-to-end с фейковым под-VM, если конструктор позволяет).
+- [ ] **Step 6: Тесты** — `ContextSelectionTests` (3 кейса из Step 2а). Add/remove через контекст-таргет уже покрыты `PlaylistsViewModelTests` (Task 4). Прогнать: `dotnet test ... --filter "ContextSelectionTests"` → 3 passed, затем полный сьют зелёный.
 
 - [ ] **Step 7: Commit**
 
@@ -1191,26 +1239,23 @@ git commit -m "feat(playlists): context menu — add to playlist / remove / rena
 - Consumes: `ReorderMath`, `DragDropListHelper` (Task 5); `PlaylistsViewModel.AddTracks`/`Reorder`/`RemoveTrackAt`; `MainViewModel.Playlists`.
 - Produces: рабочий DnD add + reorder + мульти-выбор.
 
-- [ ] **Step 1: Команды drop/reorder в `MainViewModel`**
+- [ ] **Step 1: Команды drop/reorder в `MainViewModel`** (ре-резолв — автоматически через `PlaylistContentChanged`, вручную не звать)
 ```csharp
 DropTracksOnPlaylistCommand = new RelayCommand(p =>
 {
-    // p — кортеж (Playlist target, int[] ids); собрать в шаблоне/behaviour
-    if (_playlists is null || p is not (Playlist pl, int[] ids)) return;
-    _playlists.AddTracksByIds(pl.Id, ids);   // добавить в под-VM метод-обёртку над repo.AddTracks
-    ResolveMutatedPlaylist();
+    // p — кортеж (Playlist target, IReadOnlyList<int> ids); собрать в behaviour при Drop
+    if (_playlists is null || p is not (Playlist pl, IReadOnlyList<int> ids)) return;
+    _playlists.AddTracksByIds(pl.Id, ids);   // метод уже добавлен в под-VM в Task 4; событие → авто ре-резолв
 });
 ReorderPlaylistCommand = new RelayCommand(p =>
 {
     if (_playlists is null || _currentLeftColumn is not LeftColumnState.PlaylistDetail d) return;
-    if (p is not (int from, int to)) return;
+    if (p is not (int from, int to)) return;   // to уже скорректирован через ReorderMath.AdjustForRemoval (Step 2)
     _playlists.Reorder(d.Playlist.Playlist.Id, from, to);
-    ResolveMutatedPlaylist();
 });
 ```
-Добавить в `PlaylistsViewModel`: `public void AddTracksByIds(int playlistId, int[] ids) { _repo.AddTracks(playlistId, ids); RefreshPlaylists(); MutatedPlaylistId = playlistId; }`.
 
-- [ ] **Step 2: `DragDropListHelper` attached properties** — `IsDragSource` (навешивает PreviewMouseLeftButtonDown/Move → DoDragDrop с id выделенных треков) и `PlaylistDropTarget`/`ReorderTarget` (AllowDrop + DragOver-хайлайт + Drop → соответствующая команда). Реализовать по образцу общеизвестного WPF DnD-behaviour; использовать `ReorderMath.TargetIndex` для reorder-позиции (собрать rowTops/heights из контейнера в Drop).
+- [ ] **Step 2: `DragDropListHelper` attached properties** — `IsDragSource` (навешивает PreviewMouseLeftButtonDown/Move → `ArmDrag`/`ShouldBeginDrag` → `DoDragDrop` с id выделенных треков через `MakeData`) и `PlaylistDropTarget`/`ReorderTarget` (AllowDrop + DragOver-хайлайт + Drop → соответствующая команда). В reorder-Drop: посчитать `raw = ReorderMath.TargetIndex(dropY, rowTops, rowHeights)` из геометрии контейнера, затем `to = ReorderMath.AdjustForRemoval(raw, fromPosition)` (компенсация удаления source — Task 5, point #1), и передать `(from, to)` в `ReorderPlaylistCommand`. НЕ считать позицию инлайн — только через эти две чистые функции.
 
 - [ ] **Step 3: Навесить в XAML** — трек-строки: `behaviors:DragDropListHelper.IsDragSource="True"`. Строка плейлиста в корне: drop-target → `DropTracksOnPlaylistCommand`. Треклист в PlaylistDetail: drop-target (добавить) + reorder-target (перестановка). Списки треков: `SelectionMode="Extended"`.
 
@@ -1306,7 +1351,7 @@ git commit -m "test(rendering): reusable headless render-smoke for all left-colu
 
 - [ ] **Step 2: `docs/changelog/1.0.5.md`** — по образцу `1.0.4.md`: 4-я вкладка, CRUD плейлистов, контекст-меню, DnD (add+reorder+мульти), воспроизведение через `_playbackQueue`, `PlaylistsViewModel`/ADR-0002, миграция `AddPlaylists`, render-smoke, тест-счётчик.
 
-- [ ] **Step 3: `docs/architecture.md`** — версия → 1.0.5; каталог (+`PlaylistsViewModel`, `PlaylistView`, `SqlitePlaylistRepository`, `Playlist*Entity`, `PlaylistsTemplates.xaml`, `DragDropListHelper`/`ReorderMath`); таблица миграций +`AddPlaylists`; секция «Плейлисты» (под-VM-граница + `IPlaybackQueueController`, ссылка ADR-0002); тест-счётчик.
+- [ ] **Step 3: `docs/architecture.md`** — версия → 1.0.5; каталог (+`PlaylistsViewModel`, `PlaylistView`, `SqlitePlaylistRepository`, `Playlist*Entity`, `PlaylistsTemplates.xaml`, `DragDropListHelper`/`ReorderMath`, `ContextSelection`/`TrackContextMenuBehavior`); таблица миграций +`AddPlaylists`; секция «Плейлисты» (под-VM-граница + событие `PlaylistContentChanged`; playback остаётся в `MainViewModel`, `IPlaybackQueueController` отложен — ссылка ADR-0002); тест-счётчик.
 
 - [ ] **Step 4: `docs/scope-deviations.md`** — §1.0.5: под-VM как первый разгруз (ADR-0002); фильтр библиотеки не влияет на плейлист; import/export и умные плейлисты вне E; без обложки-коллажа/пиннинга; удаление позиции по первому матчу Id при дубликатах (если так реализовано).
 
@@ -1364,9 +1409,9 @@ gh release create v1.0.5 release/MusicBakh-Setup-1.0.5.exe --repo Linkimin/Music
 **Spec coverage:**
 - 4-я вкладка/навигация → Task 4 (state+selector) + Task 6 (tab+Ctrl+4). ✅
 - Модель + миграция → Task 2. ✅ Репозиторий (CRUD/порядок/reorder/каскад/транзакции) → Task 3. ✅
-- `PlaylistsViewModel`/ADR-0002/`IPlaybackQueueController` → Task 1 (интерфейс) + Task 4 (VM+границы). ✅
-- Контекст-меню (add ▸ / remove / rename / delete, фикс механизма PlacementTarget.Tag) → Task 7. ✅
-- DnD (спайк изолированно → интеграция → мульти-выбор) → Task 5 + Task 8. ✅
+- `PlaylistsViewModel`/ADR-0002 (граница + событие вместо poll) → Task 4. ✅ `IPlaybackQueueController` — **осознанно отложен** (нет потребителя в E; вводится при первом реальном self-playback под-VM — см. шапку плана + ADR-0002). ✅
+- Контекст-меню (add ▸ / remove / rename / delete; захват — `TrackContextMenuBehavior`+`ContextSelection`) → Task 7. ✅
+- DnD (спайк изолированно с `AdjustForRemoval` → интеграция → мульти-выбор) → Task 5 + Task 8. ✅
 - Инлайн-создание/переименование + пустое имя дефолт → Task 4 (VM) + Task 6 (UI). ✅
 - Воспроизведение через `_playbackQueue` → Task 4. ✅
 - Подсветка играющего в плейлисте → Task 6. ✅
@@ -1374,8 +1419,14 @@ gh release create v1.0.5 release/MusicBakh-Setup-1.0.5.exe --repo Linkimin/Music
 - Хоткеи Ctrl+4/Esc → Task 6. ✅
 - Docs/scope-deviations/release → Task 10/11. ✅
 
-**Placeholder scan:** Task 6/7/8 XAML описаны структурно с точными привязками + образцом (`AlbumsArtistsTemplates.xaml`), а не дословным полным XAML — это сознательно (полный XAML раздул бы план на тысячи строк; образец + точные привязки достаточны, приёмка через render-smoke). Task 9 render-smoke — скелет + указание расписать LoadComponent по образцу App.xaml. Это не «TODO», а делегирование механической генерации по known-паттерну; риск снят render-smoke'ом (Task 9) и визуальным smoke (Task 10).
+**Resolved review points (2-й проход):**
+- **Reorder off-by-one** → чистая `ReorderMath.AdjustForRemoval` + 4 теста (Task 5), используется в Task 8 drop. ✅
+- **AlternationCount** → явное `AlternationCount="{Binding Playlist.Tracks.Count}"` требование в Task 6, на него опирается Task 7 Step 3. ✅
+- **Захват контекст-таргета** → конкретный `TrackContextMenuBehavior` + чистый `ContextSelection.Resolve` (юнит-тест), не «решим в моменте». ✅
+- **`IPlaybackQueueController` без потребителя** → убран из скоупа E; ADR-0002 обновлён. ✅
+- **`MutatedPlaylistId` poll** → событие `PlaylistContentChanged`, подписка один раз в конструкторе + отписка в Dispose; команды не зовут ре-резолв вручную. ✅
+- **Мелкое** — drag-порог `ArmDrag/ShouldBeginDrag` честно помечен visual-only (Task 5 Step 6); `FakePlaylistRepo` guard-расхождение отмечено (Task 4 Step 4).
 
-**Type consistency:** `IPlaybackQueueController.ReplaceQueueAndPlay(IReadOnlyList<Track>, bool, Track?)` совпадает с существующей сигнатурой в `MainViewModel` (делается public). `PlaylistView(Playlist, IReadOnlyList<Track>)` и `LeftColumnState.PlaylistDetail(PlaylistView)` согласованы (Task 4). `IPlaylistRepository` сигнатуры (Task 1) = реализация (Task 3) = использование в под-VM (Task 4). `MainViewMode.Playlists=3` (Task 1) ← selector/switch (Task 4) ← tab/Ctrl+4 (Task 6).
+**Placeholder scan:** Task 6/8/9 XAML/render-harness описаны структурно с точными привязками + образцом (`AlbumsArtistsTemplates.xaml`, `App.xaml` merge), а не дословным полным XAML — сознательно (полный XAML раздул бы план на тысячи строк). Task 7 захват-механизм и Task 5 reorder-математика — доведены до конкретного кода (были главные «решим в моменте»-места). Риск остаточных XAML-мест снят render-smoke (Task 9) + визуальным smoke (Task 10).
 
-**Открытый нюанс (зафиксировать при реализации Task 7):** удаление трека из плейлиста при дубликатах — по позиции (через `ItemsControl.AlternationIndex`), а не по Id (иначе удалит первый матч). Дефолт задокументирован; если `AlternationIndex` неудобен — прокидывать позицию иным способом, но семантика «удаляется именно эта строка» обязательна.
+**Type consistency:** `PlaylistView(Playlist, IReadOnlyList<Track>)` и `LeftColumnState.PlaylistDetail(PlaylistView)` согласованы (Task 4). `IPlaylistRepository` сигнатуры (Task 1) = реализация (Task 3) = под-VM (Task 4). `PlaylistContentChanged` — `Action<int>` (Task 4 под-VM) = подписка `OnPlaylistContentChanged(int)` (Task 4 MainViewModel). `AddTracksByIds(int, IReadOnlyList<int>)` — под-VM (Task 4) = вызов из `DropTracksOnPlaylistCommand` (Task 8). `MainViewMode.Playlists=3` (Task 1) ← selector/switch (Task 4) ← tab/Ctrl+4 (Task 6).
