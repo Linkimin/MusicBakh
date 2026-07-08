@@ -60,6 +60,26 @@ public partial class MainWindow : Window
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
+        // Инлайн-создание плейлиста (PlaylistsRootTemplate, x:Name="PlaylistNameInput"):
+        // KeyDown из TextBox внутри ResourceDictionary-шаблона не может быть подключён
+        // атрибутом KeyDown="..." — ResourceDictionary без x:Class не резолвит обработчики
+        // (MC6024). Событие — routed и всплывает до Window, поэтому ловим его здесь по
+        // имени элемента-источника. Enter подтверждает имя, Esc отменяет создание.
+        if (e.OriginalSource is System.Windows.Controls.TextBox { Name: "PlaylistNameInput" } nameInput)
+        {
+            if (e.Key == Key.Enter)
+            {
+                _viewModel.Playlists.ConfirmNewPlaylistName(nameInput.Text);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                _viewModel.Playlists.IsCreating = false;
+                e.Handled = true;
+            }
+            return;
+        }
+
         // Esc на уровне окна — drill-down back, но только если фокус НЕ в строке
         // поиска: там Esc уже обрабатывается в OnSearchBoxKeyDown (очистка поиска)
         // и выставляет e.Handled=true, так что сюда событие не дойдёт.

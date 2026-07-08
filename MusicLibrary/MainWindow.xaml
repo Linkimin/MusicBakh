@@ -44,6 +44,11 @@
                 <x:Static Member="domain:MainViewMode.Artists" />
             </KeyBinding.CommandParameter>
         </KeyBinding>
+        <KeyBinding Key="D4" Modifiers="Control" Command="{Binding SwitchViewCommand}">
+            <KeyBinding.CommandParameter>
+                <x:Static Member="domain:MainViewMode.Playlists" />
+            </KeyBinding.CommandParameter>
+        </KeyBinding>
     </Window.InputBindings>
     <Window.CommandBindings>
         <CommandBinding Command="ApplicationCommands.Find" Executed="OnFindCommandExecuted" />
@@ -125,6 +130,25 @@
                                     <DataTrigger Binding="{Binding ActiveView}">
                                         <DataTrigger.Value>
                                             <x:Static Member="domain:MainViewMode.Artists" />
+                                        </DataTrigger.Value>
+                                        <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
+                                        <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="Плейлисты"
+                            Command="{Binding SwitchViewCommand}">
+                        <Button.CommandParameter>
+                            <x:Static Member="domain:MainViewMode.Playlists" />
+                        </Button.CommandParameter>
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource MainViewTabButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ActiveView}">
+                                        <DataTrigger.Value>
+                                            <x:Static Member="domain:MainViewMode.Playlists" />
                                         </DataTrigger.Value>
                                         <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
                                         <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
@@ -299,7 +323,9 @@
                                 AlbumsTemplate="{StaticResource AlbumsRootTemplate}"
                                 ArtistsTemplate="{StaticResource ArtistsRootTemplate}"
                                 AlbumDetailTemplate="{StaticResource AlbumDetailTemplate}"
-                                ArtistDetailTemplate="{StaticResource ArtistDetailTemplate}" />
+                                ArtistDetailTemplate="{StaticResource ArtistDetailTemplate}"
+                                PlaylistsTemplate="{StaticResource PlaylistsRootTemplate}"
+                                PlaylistDetailTemplate="{StaticResource PlaylistDetailTemplate}" />
                         </ContentControl.ContentTemplateSelector>
                     </ContentControl>
                 </DockPanel>

@@ -20,6 +20,7 @@
                 <ResourceDictionary Source="Resources/PlayerIcons.xaml" />
                 <ResourceDictionary Source="Resources/TrackTemplates.xaml" />
                 <ResourceDictionary Source="Resources/AlbumsArtistsTemplates.xaml" />
+                <ResourceDictionary Source="Resources/PlaylistsTemplates.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <FontFamily x:Key="HeadingFont">Playfair Display, Georgia</FontFamily>
