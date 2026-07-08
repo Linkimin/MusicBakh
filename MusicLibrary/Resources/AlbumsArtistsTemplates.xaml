@@ -35,9 +35,14 @@
     </ContextMenu>
 
     <!-- ========== Tracks view: переиспользует существующий ListBox с TrackCardTemplate ========== -->
+    <!-- SelectionMode=Extended (Task 8): мульти-выбор Ctrl/Shift-кликом — источник батча id для
+         drag-and-drop добавления в плейлист (DragDropListHelper.SelectedTrackIds). SelectedItem
+         (TwoWay) при этом продолжает отражать "основной" выбранный трек для Play/Save/Delete —
+         WPF синхронизирует его с последним элементом SelectedItems. -->
     <DataTemplate x:Key="TracksRootTemplate">
         <ListBox ItemsSource="{Binding DataContext.DisplayedTracks, RelativeSource={RelativeSource AncestorType=Window}}"
                  SelectedItem="{Binding DataContext.SelectedTrack, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
+                 SelectionMode="Extended"
                  ItemTemplate="{StaticResource TrackCardTemplate}"
                  ItemContainerStyle="{StaticResource TrackListBoxItemStyle}"
                  Style="{StaticResource PanelListBoxStyle}" />
@@ -197,8 +202,11 @@
             <!-- Двойной клик по строке — PlayDetailTrackCommand (bug #4 fix): очередь строится из
                  Album.Tracks текущей открытой детали, а не из DisplayedTracks (вкладка «Треки»). -->
             <Grid>
+                <!-- SelectionMode=Extended + IsDragSource на строке (Task 8): drag добавления в
+                     плейлист прямо из детали альбома, тем же путём, что вкладка «Треки». -->
                 <ListBox ItemsSource="{Binding Album.Tracks}"
                          SelectedItem="{Binding DataContext.SelectedTrack, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
+                         SelectionMode="Extended"
                          ItemContainerStyle="{StaticResource TrackListBoxItemStyle}"
                          Style="{StaticResource PanelListBoxStyle}">
                     <ListBox.ItemTemplate>
@@ -206,6 +214,7 @@
                             <Grid x:Name="AlbumTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent"
                                   Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                                   behaviors:TrackContextMenuBehavior.Attach="True"
+                                  behaviors:DragDropListHelper.IsDragSource="True"
                                   ContextMenu="{StaticResource DetailTrackRowContextMenu}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="30" />
@@ -315,9 +324,13 @@
                                       Visibility="{Binding Artist.LooseTracks.Count, Converter={StaticResource CountToVisibilityConverter}}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
+                                    <!-- IsDragSource (Task 8): строка не внутри ListBox (обычный ItemsControl,
+                                         без выделения) — FindSelectedItems не найдёт Selector и вернёт null,
+                                         SelectedTrackIds корректно упадёт на "только эта строка" (см. helper). -->
                                     <Grid x:Name="LooseTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent"
                                           Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                                           behaviors:TrackContextMenuBehavior.Attach="True"
+                                          behaviors:DragDropListHelper.IsDragSource="True"
                                           ContextMenu="{StaticResource DetailTrackRowContextMenu}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />

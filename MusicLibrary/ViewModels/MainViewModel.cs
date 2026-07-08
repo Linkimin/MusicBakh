@@ -330,6 +330,23 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             _playlists.RemoveTrackAt(d.Playlist.Playlist.Id, position);
         });
 
+        // DnD (Task 8): добавление треков дропом на строку плейлиста / в треклист детали, и
+        // reorder внутри треклиста детали. Параметр — value-tuple, собирается в
+        // DragDropListHelper по факту Drop (позиция/id уже посчитаны там через ReorderMath —
+        // здесь только применение к под-VM). Ре-резолв — тем же событийным путём
+        // (PlaylistContentChanged → OnPlaylistContentChanged), вручную не зовём.
+        DropTracksOnPlaylistCommand = new RelayCommand(p =>
+        {
+            if (_playlists is null || p is not (Playlist pl, IReadOnlyList<int> ids)) return;
+            _playlists.AddTracksByIds(pl.Id, ids);
+        });
+        ReorderPlaylistCommand = new RelayCommand(p =>
+        {
+            if (_playlists is null || _currentLeftColumn is not LeftColumnState.PlaylistDetail d) return;
+            if (p is not (int from, int to)) return;
+            _playlists.Reorder(d.Playlist.Playlist.Id, from, to);
+        });
+
         // Ре-резолв открытой детали плейлиста после мутации членства (add/remove/reorder) —
         // подписка один раз здесь, отписка в Dispose. См. PlaylistsViewModel.PlaylistContentChanged.
         if (_playlists is not null)
@@ -390,6 +407,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ICommand PlayPlaylistTrackCommand { get; }
     public ICommand AddContextToPlaylistCommand { get; }
     public ICommand RemovePlaylistTrackCommand { get; }
+    public ICommand DropTracksOnPlaylistCommand { get; }
+    public ICommand ReorderPlaylistCommand { get; }
 
     /// <summary>Под-VM плейлистов (ADR-0002). Доступна только когда MainViewModel сконструирован с ней (DI); в старых тестах — null-guard в командах.</summary>
     public PlaylistsViewModel Playlists => _playlists!;

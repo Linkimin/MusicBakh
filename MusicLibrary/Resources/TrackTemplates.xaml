@@ -29,9 +29,14 @@
     </ContextMenu>
 
     <DataTemplate x:Key="TrackCardTemplate">
+        <!-- IsDragSource (Task 8): начинает drag добавления в плейлист по порогу движения мыши
+             (PreviewMouseLeftButtonDown → PreviewMouseMove, см. DragDropListHelper). Строка не
+             участвует в reorder (она не внутри плейлиста), поэтому обычный IsDragSource, а не
+             IsReorderSource. -->
         <Border x:Name="CardRoot" Padding="14" CornerRadius="12" Background="{StaticResource AccentBrush}" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" Cursor="Hand"
                 Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                 behaviors:TrackContextMenuBehavior.Attach="True"
+                behaviors:DragDropListHelper.IsDragSource="True"
                 ContextMenu="{StaticResource TrackRowContextMenu}">
             <Border.InputBindings>
                 <MouseBinding MouseAction="LeftDoubleClick"

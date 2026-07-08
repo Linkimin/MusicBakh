@@ -73,9 +73,14 @@
          Tag на Border нужен ТОЛЬКО для ContextMenu.PlacementTarget.Tag (Task 7) — сама строка
          открытие плейлиста и клики берёт через AncestorType=Window, как и раньше. -->
     <DataTemplate x:Key="PlaylistRowTemplate">
-        <Border Background="#332A2A3F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1"
+        <!-- PlaylistDropTarget (Task 8): drop трека(ов) сюда = добавить в этот плейлист
+             (DropTracksOnPlaylistCommand). DragOver-хайлайт через IsDropHighlighted +
+             DragHighlightBrush-триггер ниже (минимальный визуальный фидбек, без adorner-полировки —
+             см. комментарий в DragDropListHelper). -->
+        <Border x:Name="PlaylistRowRoot" Background="#332A2A3F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1"
                 CornerRadius="10" Padding="14,12" Margin="0,0,0,6" Cursor="Hand"
                 Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                behaviors:DragDropListHelper.PlaylistDropTarget="True"
                 ContextMenu="{StaticResource PlaylistRowContextMenu}">
             <Border.InputBindings>
                 <MouseBinding MouseAction="LeftClick"
@@ -109,6 +114,15 @@
                 </TextBox>
             </Grid>
         </Border>
+        <DataTemplate.Triggers>
+            <!-- Подсветка во время валидного DragOver (DragDropListHelper.OnPlaylistRowDragOver
+                 выставляет IsDropHighlighted=True/False). -->
+            <Trigger Property="behaviors:DragDropListHelper.IsDropHighlighted" Value="True" SourceName="PlaylistRowRoot">
+                <Setter TargetName="PlaylistRowRoot" Property="Background" Value="#402A2018" />
+                <Setter TargetName="PlaylistRowRoot" Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+                <Setter TargetName="PlaylistRowRoot" Property="BorderThickness" Value="2" />
+            </Trigger>
+        </DataTemplate.Triggers>
     </DataTemplate>
 
     <!-- ========== PlaylistsRoot: список плейлистов + инлайн-создание ========== -->
@@ -196,17 +210,37 @@
 
             <!-- Tracks list (+ empty-state). AlternationCount обязателен — Task 7 удаляет трек
                  из плейлиста по AlternationIndex (позиции в списке), без него все строки
-                 получили бы AlternationIndex=0 (дефолт AlternationCount=0). -->
+                 получили бы AlternationIndex=0 (дефолт AlternationCount=0). Та же позиция
+                 переиспользуется для reorder (Task 8) — см. DragDropListHelper.IsReorderSource.
+                 ReorderTarget на самом ListBox: Drop обрабатывает и add (drag извне — из вкладки
+                 «Треки»/альбома/исполнителя), и reorder (drag начат внутри этого же списка) —
+                 см. DragDropListHelper.OnReorderDrop. SelectionMode=Extended — мульти-выбор для
+                 батча id, Tag — доступ к MainViewModel из обработчика Drop на самом ListBox. -->
             <Grid>
                 <ListBox ItemsSource="{Binding Playlist.Tracks}"
                          AlternationCount="{Binding Playlist.Tracks.Count}"
-                         ItemContainerStyle="{StaticResource TrackListBoxItemStyle}"
-                         Style="{StaticResource PanelListBoxStyle}">
+                         SelectionMode="Extended"
+                         BorderThickness="2"
+                         Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                         behaviors:DragDropListHelper.ReorderTarget="True"
+                         ItemContainerStyle="{StaticResource TrackListBoxItemStyle}">
+                    <ListBox.Style>
+                        <Style TargetType="ListBox" BasedOn="{StaticResource PanelListBoxStyle}">
+                            <!-- Подсветка во время валидного DragOver (add ИЛИ reorder) —
+                                 минимальный визуальный фидбек, см. DragDropListHelper.OnReorderDragOver. -->
+                            <Style.Triggers>
+                                <Trigger Property="behaviors:DragDropListHelper.IsDropHighlighted" Value="True">
+                                    <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.Style>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Grid x:Name="PlaylistTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent"
                                   Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                                   behaviors:TrackContextMenuBehavior.Attach="True"
+                                  behaviors:DragDropListHelper.IsReorderSource="True"
                                   ContextMenu="{StaticResource PlaylistDetailTrackRowContextMenu}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="30" />
