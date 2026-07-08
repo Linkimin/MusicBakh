@@ -90,8 +90,10 @@ public static class DragDropListHelper
     }
 
     /// <summary>Собирает DataObject для reorder-drag: id + позиция строки в исходном списке.
-    /// Позиция валидна только для одиночного перетаскивания (reorder мульти-выбором не
-    /// поддержан — см. OnReorderDrop, там это ids.Length == 1 в условии).</summary>
+    /// Всегда ровно один трек (схваченная строка) — group-reorder не поддержан, см.
+    /// OnReorderSourcePreviewMouseMove: мульти-выбор для reorder-источника игнорируется
+    /// намеренно, чтобы same-list drag никогда не уходил в add-batch фолбэк (review-фикс,
+    /// раньше это приводило к дублированию треков в плейлисте).</summary>
     private static DataObject MakeReorderData(int trackId, int sourcePosition)
     {
         var data = new DataObject();
@@ -297,7 +299,10 @@ public static class DragDropListHelper
     /// ReorderMath). Различаем сценарии по тому, содержит ли e.Data позицию источника
     /// (SourcePositionFormat) — она проставляется только при старте drag из ЭТОГО контрола
     /// (см. OnReorderSourcePreviewMouseMove ниже, переопределяющей обычный IsDragSource на
-    /// строке ради доступа к позиции строки).
+    /// строке ради доступа к позиции строки). Same-list drag (SourcePositionFormat присутствует
+    /// и IsSameList подтверждает) ВСЕГДА обрабатывается как reorder ОДНОЙ схваченной строки и
+    /// никогда не проваливается в add-batch — независимо от того, сколько строк было выделено
+    /// в момент начала drag (review-фикс: раньше multi-select same-list drag дублировал треки).
     /// </summary>
     public static readonly DependencyProperty ReorderTargetProperty =
         DependencyProperty.RegisterAttached(
@@ -355,6 +360,13 @@ public static class DragDropListHelper
         // (в отличие от побочного состояния на элементе). Если её нет — это add-drop извне
         // (drag из вкладки «Треки»/альбома/исполнителя): делегируем DropTracksOnPlaylistCommand,
         // тот же путь, что и строка плейлиста в корневом списке.
+        //
+        // ids.Length == 1 здесь всегда true, когда SourcePositionFormat присутствует — это
+        // инвариант MakeReorderData (см. её doc), а не отдельная ветвь логики. Оставлен как
+        // defensive-проверка. КРИТИЧНО: same-list-производный drag (позиция резолвится,
+        // IsSameList подтверждает) обязан попасть именно в этот if и вернуться через
+        // ReorderPlaylistCommand — ветка else ниже (add-batch) должна обслуживать ТОЛЬКО
+        // кросс-списочные drops (иначе — дублирование треков, см. review-фикс).
         if (TryGetSourcePosition(e.Data, out int from) && ids.Length == 1 && IsSameList(listBox, from, ids[0]))
         {
             var geometry = MeasureRows(listBox);
@@ -460,20 +472,18 @@ public static class DragDropListHelper
         // TrackContextMenuBehavior.FindAlternationIndex): PlaylistDetailTemplate уже включает
         // AlternationCount="{Binding Playlist.Tracks.Count}" для контекст-меню (Task 7), поэтому
         // переиспользуем его же для reorder-позиции — не нужно вводить второй счётчик позиции.
-        // Мульти-выбор здесь намеренно игнорируется для reorder-режима DataObject (см.
-        // MakeReorderData/MakeData ниже): если в выделении >1 трека, reorder одним перетаскиванием
-        // семантически неоднозначен (какая целевая позиция у КАЖДОГО из них?) — в этом случае
-        // отправляем обычный add-batch (без позиции), и OnReorderDrop делегирует его в
-        // DropTracksOnPlaylistCommand, т.е. "перетащили несколько — добавили дубликатами в новую
-        // позицию", а не reorder. Ручной smoke (Task 10) должен проверить этот сценарий явно.
+        //
+        // Мульти-выбор здесь ВСЕГДА игнорируется для reorder-источника: раньше (до review-фикса)
+        // при >1 выбранном треке отправлялся обычный add-batch DataObject (без позиции), и
+        // OnReorderDrop, не найдя SourcePositionFormat, делегировал его в
+        // DropTracksOnPlaylistCommand — это ДУБЛИРОВАЛО уже присутствующие в плейлисте треки
+        // (add всегда просто добавляет строки, не переставляет существующие). Настоящий
+        // multi-row group-reorder не реализован (см. план) — предсказуемое поведение вместо
+        // этого: перетаскивается ТОЛЬКО схваченная строка (dragged), остальное выделение для
+        // reorder-жеста не участвует. Ручной smoke (Task 10) проверяет именно этот сценарий.
         int position = FindAlternationIndex(fe);
 
-        IList? selected = FindSelectedItems(fe);
-        int[] ids = SelectedTrackIds(selected, dragged);
-
-        DataObject data = ids.Length == 1
-            ? MakeReorderData(ids[0], position)
-            : MakeData(ids);
+        DataObject data = MakeReorderData(dragged.Id, position);
 
         DragDrop.DoDragDrop(fe, data, DragDropEffects.Move);
     }
