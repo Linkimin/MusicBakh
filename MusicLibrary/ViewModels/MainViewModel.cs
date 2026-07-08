@@ -36,6 +36,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private readonly IStatsWindowService? _statsWindowService;
     private readonly ITagsWindowService? _tagsWindowService;
     private readonly ITagRepository? _tagRepository;
+    private readonly PlaylistsViewModel? _playlists;
     private readonly DispatcherTimer _progressTimer;
 
     private string _selectedGenre = AllGenres;
@@ -84,7 +85,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         ISearchService? searchService = null,
         IStatsWindowService? statsWindowService = null,
         ITagRepository? tagRepository = null,
-        ITagsWindowService? tagsWindowService = null)
+        ITagsWindowService? tagsWindowService = null,
+        PlaylistsViewModel? playlists = null)
     {
         _trackRepository = trackRepository;
         _fileService = fileService;
@@ -98,6 +100,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _statsWindowService = statsWindowService;
         _tagsWindowService = tagsWindowService;
         _tagRepository = tagRepository;
+        _playlists = playlists;
         _selectedTagIds.CollectionChanged += (_, _) => ApplyFilters();
         LoadTagFilters();
 
@@ -212,6 +215,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 MainViewMode.Tracks => new LeftColumnState.TracksRoot(),
                 MainViewMode.Albums => new LeftColumnState.AlbumsRoot(),
                 MainViewMode.Artists => new LeftColumnState.ArtistsRoot(),
+                MainViewMode.Playlists => new LeftColumnState.PlaylistsRoot(),
                 _ => new LeftColumnState.TracksRoot()
             };
             OnPropertyChanged(nameof(CanGoBack));
@@ -284,6 +288,38 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             ReplaceQueueAndPlay(queueSource, shuffle: false, selectedTrack: track);
         });
 
+        // Плейлисты (ADR-0002): CRUD/членство живёт в PlaylistsViewModel, здесь — только
+        // навигация в CurrentLeftColumn и воспроизведение через общий ReplaceQueueAndPlay.
+        OpenPlaylistCommand = new RelayCommand(p =>
+        {
+            if (p is not Playlist pl || _playlists is null) return;
+            _navStack.Push(_currentLeftColumn);
+            CurrentLeftColumn = new LeftColumnState.PlaylistDetail(_playlists.BuildView(pl.Id));
+            OnPropertyChanged(nameof(CanGoBack));
+        });
+        PlayPlaylistCommand = new RelayCommand(p =>
+        {
+            if (p is not PlaylistView v || v.Tracks.Count == 0) return;
+            ReplaceQueueAndPlay(v.Tracks, shuffle: false);
+        });
+        ShufflePlaylistCommand = new RelayCommand(p =>
+        {
+            if (p is not PlaylistView v || v.Tracks.Count == 0) return;
+            ReplaceQueueAndPlay(v.Tracks, shuffle: true);
+        });
+        PlayPlaylistTrackCommand = new RelayCommand(p =>
+        {
+            if (p is not Track track || _currentLeftColumn is not LeftColumnState.PlaylistDetail d) return;
+            ReplaceQueueAndPlay(d.Playlist.Tracks, shuffle: false, selectedTrack: track);
+        });
+
+        // Ре-резолв открытой детали плейлиста после мутации членства (add/remove/reorder) —
+        // подписка один раз здесь, отписка в Dispose. См. PlaylistsViewModel.PlaylistContentChanged.
+        if (_playlists is not null)
+        {
+            _playlists.PlaylistContentChanged += OnPlaylistContentChanged;
+        }
+
         _audioPlayerService.MediaOpened += (_, filePath) => HandleMediaOpened(filePath);
         _audioPlayerService.MediaEnded += (_, _) => HandleMediaEnded();
         _audioPlayerService.MediaFailed += (_, message) => HandleMediaFailed(message);
@@ -331,6 +367,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ICommand PlayArtistCommand { get; }
     public ICommand ShuffleArtistCommand { get; }
     public ICommand PlayDetailTrackCommand { get; }
+    public ICommand OpenPlaylistCommand { get; }
+    public ICommand PlayPlaylistCommand { get; }
+    public ICommand ShufflePlaylistCommand { get; }
+    public ICommand PlayPlaylistTrackCommand { get; }
+
+    /// <summary>Под-VM плейлистов (ADR-0002). Доступна только когда MainViewModel сконструирован с ней (DI); в старых тестах — null-guard в командах.</summary>
+    public PlaylistsViewModel Playlists => _playlists!;
 
     /// <summary>Кэш тегов по треку. XAML-конвертер использует его для отображения чипов на карточке трека.</summary>
     public IReadOnlyDictionary<int, ObservableCollection<Tag>> TagsByTrackId => _tagsByTrackId;
@@ -1402,8 +1445,22 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _playerSettingsRepository.Save(new PlayerSettings(_volume, _isMuted, _repeatMode));
     }
 
+    /// <summary>
+    /// Обработчик PlaylistsViewModel.PlaylistContentChanged: если сейчас открыта деталь именно
+    /// этого плейлиста — пересобрать её свежими треками (add/remove/reorder уже применены в репозитории).
+    /// </summary>
+    private void OnPlaylistContentChanged(int playlistId)
+    {
+        if (_currentLeftColumn is LeftColumnState.PlaylistDetail d && d.Playlist.Playlist.Id == playlistId)
+            CurrentLeftColumn = new LeftColumnState.PlaylistDetail(_playlists!.BuildView(playlistId));
+    }
+
     public void Dispose()
     {
+        if (_playlists is not null)
+        {
+            _playlists.PlaylistContentChanged -= OnPlaylistContentChanged;
+        }
         _progressTimer.Stop();
         _audioPlayerService.Dispose();
     }

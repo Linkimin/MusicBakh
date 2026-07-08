@@ -13,4 +13,6 @@ public abstract record LeftColumnState
     public sealed record ArtistsRoot : LeftColumnState;
     public sealed record AlbumDetail(AlbumAggregate Album) : LeftColumnState;
     public sealed record ArtistDetail(ArtistAggregate Artist) : LeftColumnState;
+    public sealed record PlaylistsRoot : LeftColumnState;
+    public sealed record PlaylistDetail(PlaylistView Playlist) : LeftColumnState;
 }
