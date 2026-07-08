@@ -35,6 +35,8 @@ public sealed class PlaylistsViewModel : ViewModelBase
         StartNewPlaylistCommand = new RelayCommand(_ => IsCreating = true);
         AddContextTargetToPlaylistCommand = new RelayCommand(p => { if (p is Playlist pl) AddContextTargetToPlaylist(pl); });
         DeletePlaylistCommand = new RelayCommand(p => { if (p is Playlist pl) DeletePlaylist(pl); });
+        StartRenameCommand = new RelayCommand(p => { if (p is Playlist pl) EditingPlaylistId = pl.Id; });
+        CancelRenameCommand = new RelayCommand(_ => EditingPlaylistId = null);
     }
 
     public ObservableCollection<Playlist> Playlists { get; }
@@ -42,9 +44,19 @@ public sealed class PlaylistsViewModel : ViewModelBase
     private bool _isCreating;
     public bool IsCreating { get => _isCreating; set => SetProperty(ref _isCreating, value); }
 
+    /// <summary>
+    /// Id плейлиста, чья строка сейчас переведена в инлайн-редактирование имени (null — ни одной).
+    /// Минимальный аналог IsCreating для точечного per-row состояния: одновременно
+    /// редактируется не более одной строки, конвертер в XAML сравнивает Id строки с этим значением.
+    /// </summary>
+    private int? _editingPlaylistId;
+    public int? EditingPlaylistId { get => _editingPlaylistId; set => SetProperty(ref _editingPlaylistId, value); }
+
     public ICommand StartNewPlaylistCommand { get; }
     public ICommand AddContextTargetToPlaylistCommand { get; }
     public ICommand DeletePlaylistCommand { get; }
+    public ICommand StartRenameCommand { get; }
+    public ICommand CancelRenameCommand { get; }
 
     public void RefreshPlaylists()
     {
@@ -64,6 +76,7 @@ public sealed class PlaylistsViewModel : ViewModelBase
     {
         var final = string.IsNullOrWhiteSpace(name) ? p.Name : name.Trim();
         _repo.Rename(p.Id, final);
+        EditingPlaylistId = null;
         RefreshPlaylists();
     }
 

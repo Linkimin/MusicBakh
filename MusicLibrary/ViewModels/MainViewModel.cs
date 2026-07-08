@@ -313,6 +313,23 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             ReplaceQueueAndPlay(d.Playlist.Tracks, shuffle: false, selectedTrack: track);
         });
 
+        // Контекст-меню (Task 7): «Добавить в плейлист ▸» на любой трек-строке и «Убрать из
+        // плейлиста» в PlaylistDetail. Фиксацию контекст-таргета (какой трек/выделение) делает
+        // TrackContextMenuBehavior при открытии меню — команды здесь только применяют мутацию.
+        // Ре-резолв открытой детали НЕ вызывается вручную: под-VM поднимает PlaylistContentChanged,
+        // обработчик OnPlaylistContentChanged (подписан ниже) сам пересобирает деталь.
+        AddContextToPlaylistCommand = new RelayCommand(p =>
+        {
+            if (_playlists is null || p is not Playlist pl) return;
+            _playlists.AddContextTargetToPlaylist(pl);
+        });
+        RemovePlaylistTrackCommand = new RelayCommand(p =>
+        {
+            if (_playlists is null || _currentLeftColumn is not LeftColumnState.PlaylistDetail d) return;
+            if (p is not int position) return;
+            _playlists.RemoveTrackAt(d.Playlist.Playlist.Id, position);
+        });
+
         // Ре-резолв открытой детали плейлиста после мутации членства (add/remove/reorder) —
         // подписка один раз здесь, отписка в Dispose. См. PlaylistsViewModel.PlaylistContentChanged.
         if (_playlists is not null)
@@ -371,6 +388,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ICommand PlayPlaylistCommand { get; }
     public ICommand ShufflePlaylistCommand { get; }
     public ICommand PlayPlaylistTrackCommand { get; }
+    public ICommand AddContextToPlaylistCommand { get; }
+    public ICommand RemovePlaylistTrackCommand { get; }
 
     /// <summary>Под-VM плейлистов (ADR-0002). Доступна только когда MainViewModel сконструирован с ней (DI); в старых тестах — null-guard в командах.</summary>
     public PlaylistsViewModel Playlists => _playlists!;

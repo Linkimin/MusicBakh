@@ -19,21 +19,95 @@
          обязательна для показ/скрытие кнопки «+ Новый плейлист» / поля инлайн-ввода. -->
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter" />
+    <!-- Сравнивает Id строки плейлиста с Playlists.EditingPlaylistId (минимальный инлайн-edit,
+         Task 7): true → показать TextBox переименования, false → показать TextBlock с именем. -->
+    <converters:IdEqualsConverter x:Key="IdEqualsConverter" />
+
+    <!-- Контекст-меню строки плейлиста (Task 7): «Переименовать» переводит строку в инлайн-edit
+         (Playlists.StartRenameCommand), «Удалить» — DeletePlaylistCommand. DataContext меню —
+         сам Playlist (обычный DataContext, НЕ PlacementTarget.Tag: команды уже на под-VM,
+         которую видно через Window точно так же). -->
+    <ContextMenu x:Key="PlaylistRowContextMenu" x:Shared="False">
+        <MenuItem Header="Переименовать"
+                  Command="{Binding PlacementTarget.Tag.Playlists.StartRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                  CommandParameter="{Binding}" />
+        <MenuItem Header="Удалить"
+                  Command="{Binding PlacementTarget.Tag.Playlists.DeletePlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                  CommandParameter="{Binding}" />
+    </ContextMenu>
+
+    <!-- Контекст-меню трек-строки ВНУТРИ детали плейлиста (Task 7): «Добавить в плейлист ▸» +
+         «Новый плейлист…» (как и везде) + «Убрать из плейлиста» — специфично для этого места.
+         CommandParameter «Убрать» — позиция строки (0-based), а не Id трека: RemovePlaylistTrackCommand
+         удаляет ПО ПОЗИЦИИ (см. MainViewModel), чтобы дубликаты одного трека в плейлисте не путались.
+         Источник позиции — TrackContextMenuBehavior.ResolvedPosition, а НЕ голый
+         "PlacementTarget.(ItemsControl.AlternationIndex)": AlternationIndex — read-only attached
+         свойство БЕЗ Inherits, выставляется ItemsControl только на ListBoxItem-контейнере, а
+         PlacementTarget — это внутренний Grid строки, не сам контейнер. Прямое чтение с
+         PlacementTarget вернуло бы дефолт 0 для каждой строки. TrackContextMenuBehavior поднимается
+         до ListBoxItem и кладёт реальный AlternationIndex в ResolvedPosition НА САМОМ Grid
+         (см. Behaviors/TrackContextMenuBehavior.cs) — оттуда PlacementTarget его уже читает напрямую. -->
+    <ContextMenu x:Key="PlaylistDetailTrackRowContextMenu" x:Shared="False">
+        <MenuItem Header="Добавить в плейлист"
+                  ItemsSource="{Binding PlacementTarget.Tag.Playlists.Playlists, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.ItemContainerStyle>
+                <Style TargetType="MenuItem">
+                    <Setter Property="Header" Value="{Binding Name}" />
+                    <Setter Property="Command" Value="{Binding PlacementTarget.Tag.AddContextToPlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <Setter Property="CommandParameter" Value="{Binding}" />
+                </Style>
+            </MenuItem.ItemContainerStyle>
+        </MenuItem>
+        <MenuItem Header="Новый плейлист…"
+                  Command="{Binding PlacementTarget.Tag.Playlists.StartNewPlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Separator />
+        <MenuItem Header="Убрать из плейлиста"
+                  Command="{Binding PlacementTarget.Tag.RemovePlaylistTrackCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                  CommandParameter="{Binding PlacementTarget.(behaviors:TrackContextMenuBehavior.ResolvedPosition), RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </ContextMenu>
 
     <!-- ========== PlaylistRow: строка плейлиста в корневом списке ========== -->
     <!-- DataContext строки — сам Playlist (элемент Playlists.Playlists). OpenPlaylistCommand
          берём через RelativeSource AncestorType=Window (DataContext окна = MainViewModel),
-         а не через ItemsControl — тот же приём, что и в AlbumTileTemplate/ArtistRowTemplate. -->
+         а не через ItemsControl — тот же приём, что и в AlbumTileTemplate/ArtistRowTemplate.
+         Tag на Border нужен ТОЛЬКО для ContextMenu.PlacementTarget.Tag (Task 7) — сама строка
+         открытие плейлиста и клики берёт через AncestorType=Window, как и раньше. -->
     <DataTemplate x:Key="PlaylistRowTemplate">
         <Border Background="#332A2A3F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1"
-                CornerRadius="10" Padding="14,12" Margin="0,0,0,6" Cursor="Hand">
+                CornerRadius="10" Padding="14,12" Margin="0,0,0,6" Cursor="Hand"
+                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                ContextMenu="{StaticResource PlaylistRowContextMenu}">
             <Border.InputBindings>
                 <MouseBinding MouseAction="LeftClick"
                               Command="{Binding DataContext.OpenPlaylistCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                               CommandParameter="{Binding}" />
             </Border.InputBindings>
-            <TextBlock Text="{Binding Name}" Foreground="{StaticResource ForegroundBrush}"
-                       FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" />
+            <Grid>
+                <!-- Обычное отображение имени — видно, пока строка НЕ в режиме переименования. -->
+                <TextBlock Text="{Binding Name}" Foreground="{StaticResource ForegroundBrush}"
+                           FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis">
+                    <TextBlock.Visibility>
+                        <MultiBinding Converter="{StaticResource IdEqualsConverter}" ConverterParameter="Invert">
+                            <Binding Path="Id" />
+                            <Binding Path="DataContext.Playlists.EditingPlaylistId" RelativeSource="{RelativeSource AncestorType=Window}" />
+                        </MultiBinding>
+                    </TextBlock.Visibility>
+                </TextBlock>
+
+                <!-- Инлайн-ввод переименования: тот же MC6024-обход, что и создание плейлиста —
+                     Enter/Esc ловятся в Window_KeyDown по x:Name="PlaylistRenameInput". -->
+                <TextBox x:Name="PlaylistRenameInput"
+                         Style="{StaticResource SearchTextBoxStyle}"
+                         Text="{Binding Name, Mode=OneWay}"
+                         behaviors:FocusOnVisibleBehavior.FocusOnVisible="True">
+                    <TextBox.Visibility>
+                        <MultiBinding Converter="{StaticResource IdEqualsConverter}">
+                            <Binding Path="Id" />
+                            <Binding Path="DataContext.Playlists.EditingPlaylistId" RelativeSource="{RelativeSource AncestorType=Window}" />
+                        </MultiBinding>
+                    </TextBox.Visibility>
+                </TextBox>
+            </Grid>
         </Border>
     </DataTemplate>
 
@@ -130,7 +204,10 @@
                          Style="{StaticResource PanelListBoxStyle}">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid x:Name="PlaylistTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent">
+                            <Grid x:Name="PlaylistTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent"
+                                  Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  behaviors:TrackContextMenuBehavior.Attach="True"
+                                  ContextMenu="{StaticResource PlaylistDetailTrackRowContextMenu}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="30" />
                                     <ColumnDefinition Width="*" />

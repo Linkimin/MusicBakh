@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:converters="clr-namespace:MusicLibrary.Converters">
+                    xmlns:converters="clr-namespace:MusicLibrary.Converters"
+                    xmlns:behaviors="clr-namespace:MusicLibrary.Behaviors">
 
     <!-- Конвертеры объявлены здесь локально: {StaticResource} внутри DataTemplate этого
          merged-словаря резолвится при загрузке шаблона и НЕ видит ключей, объявленных прямыми
@@ -12,6 +13,26 @@
     <!-- Локально (MultiBinding.Converter резолвится при загрузке шаблона): подсветка
          играющего трека в детали альбома/исполнителя сравнивает трек строки с PlayingTrack. -->
     <converters:TrackIdentityMatchConverter x:Key="TrackIdentityMatchConverter" />
+
+    <!-- Контекст-меню трек-строки в detail (Task 7) — идентично TrackRowContextMenu из
+         TrackTemplates.xaml, но локальная копия: PlacementTarget.Tag/AncestorType=ContextMenu
+         резолвится при загрузке шаблона внутри ЭТОГО словаря, {StaticResource} на ключ из
+         другого merged-словаря недоступен (тот же D-lesson, см. комментарий выше). -->
+    <ContextMenu x:Key="DetailTrackRowContextMenu" x:Shared="False">
+        <MenuItem Header="Добавить в плейлист"
+                  ItemsSource="{Binding PlacementTarget.Tag.Playlists.Playlists, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.ItemContainerStyle>
+                <Style TargetType="MenuItem">
+                    <Setter Property="Header" Value="{Binding Name}" />
+                    <Setter Property="Command" Value="{Binding PlacementTarget.Tag.AddContextToPlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <Setter Property="CommandParameter" Value="{Binding}" />
+                </Style>
+            </MenuItem.ItemContainerStyle>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="Новый плейлист…"
+                  Command="{Binding PlacementTarget.Tag.Playlists.StartNewPlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </ContextMenu>
 
     <!-- ========== Tracks view: переиспользует существующий ListBox с TrackCardTemplate ========== -->
     <DataTemplate x:Key="TracksRootTemplate">
@@ -182,7 +203,10 @@
                          Style="{StaticResource PanelListBoxStyle}">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid x:Name="AlbumTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent">
+                            <Grid x:Name="AlbumTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent"
+                                  Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  behaviors:TrackContextMenuBehavior.Attach="True"
+                                  ContextMenu="{StaticResource DetailTrackRowContextMenu}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="30" />
                                     <ColumnDefinition Width="*" />
@@ -291,7 +315,10 @@
                                       Visibility="{Binding Artist.LooseTracks.Count, Converter={StaticResource CountToVisibilityConverter}}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid x:Name="LooseTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent">
+                                    <Grid x:Name="LooseTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent"
+                                          Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          behaviors:TrackContextMenuBehavior.Attach="True"
+                                          ContextMenu="{StaticResource DetailTrackRowContextMenu}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />

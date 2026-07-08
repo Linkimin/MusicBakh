@@ -80,6 +80,27 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Инлайн-переименование плейлиста (PlaylistRowTemplate, x:Name="PlaylistRenameInput"):
+        // DataContext строки — сам Playlist, поэтому берём его прямо с TextBox.DataContext
+        // (тот же MC6024-обход, что и для создания выше). Enter подтверждает, Esc отменяет.
+        if (e.OriginalSource is System.Windows.Controls.TextBox { Name: "PlaylistRenameInput" } renameInput)
+        {
+            if (renameInput.DataContext is Playlist targetPlaylist)
+            {
+                if (e.Key == Key.Enter)
+                {
+                    _viewModel.Playlists.RenamePlaylist(targetPlaylist, renameInput.Text);
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.Escape)
+                {
+                    _viewModel.Playlists.CancelRenameCommand.Execute(null);
+                    e.Handled = true;
+                }
+            }
+            return;
+        }
+
         // Esc на уровне окна — drill-down back, но только если фокус НЕ в строке
         // поиска: там Esc уже обрабатывается в OnSearchBoxKeyDown (очистка поиска)
         // и выставляет e.Handled=true, так что сюда событие не дойдёт.
