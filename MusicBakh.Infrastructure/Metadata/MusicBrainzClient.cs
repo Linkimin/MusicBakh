@@ -24,15 +24,6 @@ public sealed class MusicBrainzClient : IMusicBrainzClient
     {
         _httpClient = httpClient;
 
-        if (_httpClient.BaseAddress is null)
-        {
-            _httpClient.BaseAddress = new Uri(BaseUrl);
-        }
-
-        if (!_httpClient.DefaultRequestHeaders.UserAgent.Any())
-        {
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("MusicLibrary/1.0 (educational, ryabec0@gmail.com)");
-        }
     }
 
     public async Task<MusicBrainzMatch?> SearchAsync(string artist, string title, CancellationToken cancellationToken)
@@ -45,14 +36,16 @@ public sealed class MusicBrainzClient : IMusicBrainzClient
         await ThrottleAsync(cancellationToken).ConfigureAwait(false);
 
         string query = BuildQuery(artist, title);
-        string url = $"recording/?query={Uri.EscapeDataString(query)}&fmt=json&limit=1";
+        string url = $"{BaseUrl}recording/?query={Uri.EscapeDataString(query)}&fmt=json&limit=1";
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(RequestTimeout);
 
         try
         {
-            using HttpResponseMessage response = await _httpClient.GetAsync(url, timeout.Token).ConfigureAwait(false);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.UserAgent.ParseAdd("MusicBakh/1.0 (https://github.com/Linkimin/MusicLibraryRelize)");
+            using HttpResponseMessage response = await _httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 return null;
@@ -97,7 +90,7 @@ public sealed class MusicBrainzClient : IMusicBrainzClient
 
     private static string Escape(string value)
     {
-        return value.Replace("\"", "\\\"").Replace("\\", "\\\\");
+        return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 
     private static MusicBrainzMatch? Parse(Stream stream)

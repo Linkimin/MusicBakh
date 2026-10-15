@@ -1,5 +1,6 @@
 using MusicBakh.Application.Abstractions;
 using MusicBakh.Application.Contracts;
+using MusicBakh.Core.Domain;
 using MusicLibrary.ViewModels;
 using System.Windows;
 
@@ -16,15 +17,15 @@ public sealed class AddTrackDialogService : IAddTrackDialogService
         _importer = importer;
     }
 
-    public TrackImportCandidate? Show()
+    public Track? Show(Func<TrackImportCandidate, Track> save)
     {
-        var viewModel = new AddTrackViewModel(_openFileDialog, _importer);
+        using var viewModel = new AddTrackViewModel(_openFileDialog, _importer, save);
         var window = new AddTrackWindow(viewModel)
         {
             Owner = Application.Current.MainWindow
         };
 
         bool? result = window.ShowDialog();
-        return result == true ? viewModel.Result : null;
+        return result == true ? viewModel.SavedTrack : null;
     }
 }

@@ -754,13 +754,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        TrackImportCandidate? candidate = _addTrackDialogService.Show();
-        if (candidate is null)
-        {
-            return;
-        }
-
-        Track saved = _trackRepository.Add(new Track
+        Track? saved = _addTrackDialogService.Show(candidate => _trackRepository.Add(new Track
         {
             Title = candidate.Title,
             Artist = candidate.Artist,
@@ -773,8 +767,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             Year = candidate.Year,
             TrackNumber = candidate.TrackNumber,
             AlbumArtist = candidate.AlbumArtist
-        });
-
+        }));
+        if (saved is null) return;
         AddTrack(saved);
         SetStatus(OperationResult.Success($"Трек «{saved.Title}» добавлен в библиотеку."));
     }

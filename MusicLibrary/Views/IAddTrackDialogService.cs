@@ -1,4 +1,5 @@
 using MusicBakh.Application.Contracts;
+using MusicBakh.Core.Domain;
 
 namespace MusicLibrary.Views;
 
@@ -9,7 +10,7 @@ namespace MusicLibrary.Views;
 public interface IAddTrackDialogService
 {
     /// <summary>
-    /// Открывает модальное окно добавления и возвращает заполненный кандидат, если пользователь подтвердил.
+    /// Сохраняет кандидат до закрытия окна; при ошибке окно остаётся открытым для повтора или отмены.
     /// </summary>
-    TrackImportCandidate? Show();
+    Track? Show(Func<TrackImportCandidate, Track> save);
 }
