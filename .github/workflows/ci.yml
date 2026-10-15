@@ -2,13 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [main, claude/**]
+    branches: [main, claude/**, codex/**]
+  workflow_dispatch:
   pull_request:
     branches: [main]
 
 jobs:
   build-and-test:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +26,15 @@ jobs:
         run: dotnet build MusicLibrary.sln --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test MusicLibrary.Tests/MusicLibrary.Tests.csproj --configuration Release --no-build --logger "trx" --results-directory TestResults
+        run: dotnet test MusicLibrary.Tests/MusicLibrary.Tests.csproj --configuration Release --no-build --filter "Category!=Benchmark" --blame-hang --blame-hang-timeout 60s --blame-hang-dump-type none --logger "trx" --results-directory TestResults
+
+      - name: Validate Windows publication
+        shell: pwsh
+        run: ./scripts/build-release.ps1 -PublishOnly
+
+      - name: Search benchmark (manual run)
+        if: github.event_name == 'workflow_dispatch'
+        run: dotnet test MusicLibrary.Tests/MusicLibrary.Tests.csproj --configuration Release --no-build --filter "Category=Benchmark" --logger "trx;LogFileName=benchmark.trx" --results-directory TestResults
 
       - name: Upload test results
         if: always()
