@@ -40,7 +40,7 @@ SELECT t.*
 FROM Tracks AS t
 JOIN TracksFts AS f ON f.rowid = t.Id
 WHERE TracksFts MATCH {ftsQuery}
-ORDER BY bm25(TracksFts)
+ORDER BY bm25(TracksFts), t.Id
 LIMIT {limit}")
             .AsNoTracking()
             .ToList();

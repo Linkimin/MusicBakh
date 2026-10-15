@@ -13,10 +13,11 @@ namespace MusicBakh.Infrastructure.Search;
 internal static class FtsQueryBuilder
 {
     private const int MaxTokens = 10;
+    public const int MaxQueryLength = 4096;
 
     public static string? Build(string? raw)
     {
-        if (string.IsNullOrWhiteSpace(raw))
+        if (string.IsNullOrWhiteSpace(raw) || raw.Length > MaxQueryLength)
         {
             return null;
         }
@@ -43,17 +44,18 @@ internal static class FtsQueryBuilder
     private static string Sanitize(string word)
     {
         // Зарезервированные FTS5 символы: " * : ( ) — могут менять смысл запроса
-        // или сломать парсер. Заменяем на nothing, чтобы не плодить лишних токенов.
+        // или сломать парсер. Пробел сохраняет границу слов в названиях A:B и A(B).
         Span<char> buffer = stackalloc char[word.Length];
         int length = 0;
         foreach (char c in word)
         {
             if (c is '"' or '*' or ':' or '(' or ')')
             {
+                buffer[length++] = ' ';
                 continue;
             }
             buffer[length++] = c;
         }
-        return length == 0 ? string.Empty : new string(buffer[..length]);
+        return length == 0 ? string.Empty : new string(buffer[..length]).Trim();
     }
 }

@@ -15,6 +15,16 @@ namespace MusicLibrary.Tests.Search;
 /// </summary>
 public sealed class SqliteFtsSearchServiceTests
 {
+    [Theory]
+    [InlineData("A:B")]
+    [InlineData("A(B)")]
+    public void Search_PunctuationPreservesWordBoundaries(string title)
+    {
+        using var factory = new MigratedSqliteDbContextFactory();
+        new SqliteTrackRepository(factory.CreateContext).Add(new Track { Title = title, FilePath = "1.mp3" });
+        Assert.Single(new SqliteFtsSearchService(factory.CreateContext).Search(title));
+    }
+
     [Fact]
     public void Empty_Query_Returns_Empty_List_Without_SQL()
     {
