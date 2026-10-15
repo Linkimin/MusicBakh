@@ -20,9 +20,9 @@
     <Authors>Matvey Bakhmatov</Authors>
     <Description>Настольный музыкальный плеер и библиотека для Windows.</Description>
     <Copyright>Copyright (c) 2026 Matvey Bakhmatov. Apache-2.0.</Copyright>
-    <Version>1.0.4</Version>
-    <AssemblyVersion>1.0.4.0</AssemblyVersion>
-    <FileVersion>1.0.4.0</FileVersion>
+    <Version>1.0.5</Version>
+    <AssemblyVersion>1.0.5.0</AssemblyVersion>
+    <FileVersion>1.0.5.0</FileVersion>
     <NeutralLanguage>en-US</NeutralLanguage>
   </PropertyGroup>
 
