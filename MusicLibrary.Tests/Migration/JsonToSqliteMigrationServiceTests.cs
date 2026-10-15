@@ -105,12 +105,22 @@ public sealed class JsonToSqliteMigrationServiceTests : IDisposable
         using var factory = new InMemorySqliteDbContextFactory();
         var migration = new JsonToSqliteMigrationService(_tempRoot, factory.CreateContext);
 
-        var result = migration.Run();
+        Assert.Throws<System.Text.Json.JsonException>(() => migration.Run());
+        Assert.Equal("{ not valid json", File.ReadAllText(legacyPath));
+        Assert.Empty(Directory.GetFiles(_tempRoot, "*.backup-*"));
+    }
 
-        // признаём, что файл существовал; но записей не получили
-        Assert.True(result.PerformedMigration);
-        Assert.Equal(0, result.MigratedTracks);
-        Assert.True(File.Exists(result.BackupPath!));
+    [Fact]
+    public void Run_DeduplicatesPathsInsideLegacyFile()
+    {
+        File.WriteAllText(Path.Combine(_tempRoot, "userTracks.json"), """
+            [{"title":"One","filePath":"C:/Music/song.mp3"},
+             {"title":"Two","filePath":"c:/music/SONG.mp3"}]
+            """);
+        using var factory = new MigratedSqliteDbContextFactory();
+        var result = new JsonToSqliteMigrationService(_tempRoot, factory.CreateContext).Run();
+        Assert.Equal(1, result.MigratedTracks);
+        Assert.Single(new SqliteTrackRepository(factory.CreateContext).GetAll());
     }
 
     [Fact]

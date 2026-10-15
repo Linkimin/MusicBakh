@@ -40,8 +40,13 @@ public sealed class JsonToSqliteMigrationService
             return new MigrationResult(PerformedMigration: false, MigratedTracks: 0, BackupPath: null);
         }
 
-        var legacy = new JsonUserTrackStorage(_rootDirectory);
-        var tracks = legacy.Load();
+        // Миграция не должна выдавать повреждённый JSON за пустую библиотеку.
+        // При ошибке исходник остаётся на месте для восстановления и повторной попытки.
+        using var stream = File.OpenRead(legacyPath);
+        var tracks = System.Text.Json.JsonSerializer.Deserialize<List<UserTrack>>(stream,
+            new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase })
+            ?? throw new System.Text.Json.JsonException("Библиотека должна содержать массив треков.");
+        stream.Close();
 
         int migrated = 0;
         using (var ctx = _contextFactory())
@@ -58,7 +63,12 @@ public sealed class JsonToSqliteMigrationService
 
             foreach (var t in tracks)
             {
-                if (existingPaths.Contains(t.FilePath))
+                if (t is null || string.IsNullOrWhiteSpace(t.FilePath) || !double.IsFinite(t.DurationSeconds)
+                    || t.DurationSeconds < 0)
+                {
+                    throw new System.Text.Json.JsonException("В библиотеке найдена некорректная запись трека.");
+                }
+                if (!existingPaths.Add(t.FilePath))
                 {
                     continue;
                 }
@@ -89,7 +99,7 @@ public sealed class JsonToSqliteMigrationService
 
         var backupPath = Path.Combine(
             _rootDirectory,
-            $"userTracks.json.backup-{DateTime.UtcNow:yyyyMMdd-HHmmss}");
+            $"userTracks.json.backup-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}");
         File.Move(legacyPath, backupPath);
 
         return new MigrationResult(PerformedMigration: true, MigratedTracks: migrated, BackupPath: backupPath);

@@ -7,6 +7,29 @@ namespace MusicLibrary.Tests.Persistence;
 
 public sealed class SqlitePlayerSettingsRepositoryTests
 {
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-1")]
+    [InlineData("2")]
+    public void Load_InvalidVolume_UsesDefault(string raw)
+    {
+        using var factory = new InMemorySqliteDbContextFactory();
+        using var ctx = factory.CreateContext();
+        ctx.KeyValueStore.Add(new() { Key = "player.volume", Value = raw });
+        ctx.KeyValueStore.Add(new() { Key = "player.repeatMode", Value = "999" });
+        ctx.SaveChanges();
+        Assert.Equal(PlayerSettings.Default, new SqlitePlayerSettingsRepository(factory.CreateContext).Load());
+    }
+
+    [Fact]
+    public void ConnectionString_PreservesSemicolonInPath()
+    {
+        const string path = "C:/Music;Library/library.db";
+        var options = new MusicBakh.Infrastructure.Persistence.LibraryDbContextOptions(path);
+        Assert.Equal(path, new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(options.ConnectionString).DataSource);
+    }
+
     [Fact]
     public void Load_Returns_Default_For_Fresh_Db()
     {

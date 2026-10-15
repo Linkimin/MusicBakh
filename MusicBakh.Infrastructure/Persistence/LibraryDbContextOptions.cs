@@ -14,7 +14,10 @@ public sealed record LibraryDbContextOptions(string DatabasePath)
             "MusicLibrary",
             "library.db"));
 
-    public string ConnectionString => $"Data Source={DatabasePath}";
+    public string ConnectionString => new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+    {
+        DataSource = DatabasePath
+    }.ToString();
 
     /// <summary>
     /// Создаёт каталог, в котором будет лежать SQLite-файл. SQLite сам файл создаст,

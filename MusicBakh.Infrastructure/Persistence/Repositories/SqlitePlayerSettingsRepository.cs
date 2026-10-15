@@ -48,7 +48,8 @@ public sealed class SqlitePlayerSettingsRepository : IPlayerSettingsRepository
     {
         using var ctx = _contextFactory();
         var entry = ctx.KeyValueStore.FirstOrDefault(k => k.Key == ActiveViewKey);
-        return entry is null ? null : int.Parse(entry.Value, CultureInfo.InvariantCulture);
+        return entry is not null && int.TryParse(entry.Value, CultureInfo.InvariantCulture, out int index)
+            && Enum.IsDefined((MainViewMode)index) ? index : null;
     }
 
     /// <summary>Сохраняет активный режим левой колонки в KV-хранилище.</summary>
@@ -74,11 +75,12 @@ public sealed class SqlitePlayerSettingsRepository : IPlayerSettingsRepository
 
     private static double ReadDouble(IDictionary<string, string> map, string key, double fallback) =>
         map.TryGetValue(key, out var raw) && double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var v)
+            && double.IsFinite(v) && v >= 0 && v <= 1
             ? v : fallback;
 
     private static bool ReadBool(IDictionary<string, string> map, string key, bool fallback) =>
         map.TryGetValue(key, out var raw) && bool.TryParse(raw, out var v) ? v : fallback;
 
     private static RepeatMode ReadEnum(IDictionary<string, string> map, string key, RepeatMode fallback) =>
-        map.TryGetValue(key, out var raw) && Enum.TryParse<RepeatMode>(raw, out var v) ? v : fallback;
+        map.TryGetValue(key, out var raw) && Enum.TryParse<RepeatMode>(raw, out var v) && Enum.IsDefined(v) ? v : fallback;
 }
