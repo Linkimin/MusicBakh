@@ -14,6 +14,8 @@ public sealed class MainViewModelTagAttachTests
         public List<Tag> Tags { get; } = new();
         public Dictionary<int, List<int>> Attachments { get; } = new();
         public IReadOnlyList<Tag> GetAll() => Tags;
+        public IReadOnlyDictionary<int, IReadOnlyList<Tag>> GetTagsByTrack() =>
+            Attachments.ToDictionary(p => p.Key, p => GetTagsForTrack(p.Key));
         public Tag? FindById(int id) => Tags.FirstOrDefault(t => t.Id == id);
         public Tag Add(Tag tag) { Tags.Add(tag); return tag; }
         public void Update(Tag tag) { }

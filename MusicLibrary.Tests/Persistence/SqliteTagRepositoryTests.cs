@@ -9,6 +9,27 @@ namespace MusicLibrary.Tests.Persistence;
 public sealed class SqliteTagRepositoryTests
 {
     [Fact]
+    public void BulkTags_ReturnsOrderedAssociationsAndReflectsDeletion()
+    {
+        using var factory = new MigratedSqliteDbContextFactory();
+        SeedTrack(factory, 1);
+        SeedTrack(factory, 2);
+        var repo = new SqliteTagRepository(factory.CreateContext);
+        var z = repo.Add(new Tag { Name = "Z", Color = "#123456" });
+        var a = repo.Add(new Tag { Name = "A" });
+        repo.AttachTag(1, z.Id);
+        repo.AttachTag(1, a.Id);
+        repo.AttachTag(2, z.Id);
+        var result = repo.GetTagsByTrack();
+        Assert.Equal(new[] { "A", "Z" }, result[1].Select(t => t.Name));
+        Assert.Equal("#123456", Assert.Single(result[2]).Color);
+        repo.Remove(z.Id);
+        result = repo.GetTagsByTrack();
+        Assert.Equal("A", Assert.Single(result[1]).Name);
+        Assert.False(result.ContainsKey(2));
+    }
+
+    [Fact]
     public void Add_AssignsId_And_GetAll_Returns_It()
     {
         using var factory = new MigratedSqliteDbContextFactory();

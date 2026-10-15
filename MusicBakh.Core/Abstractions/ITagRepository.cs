@@ -23,6 +23,9 @@ public interface ITagRepository
     /// <summary>Все теги, привязанные к указанному треку.</summary>
     IReadOnlyList<Tag> GetTagsForTrack(int trackId);
 
+    /// <summary>Снимок всех связей одним запросом; треки без тегов отсутствуют в словаре.</summary>
+    IReadOnlyDictionary<int, IReadOnlyList<Tag>> GetTagsByTrack();
+
     /// <summary>Привязать тег к треку. Идемпотентно: повторный вызов ничего не делает.</summary>
     void AttachTag(int trackId, int tagId);
 
