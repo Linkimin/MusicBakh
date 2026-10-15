@@ -80,7 +80,7 @@ MusicLibrary (WPF, net10.0-windows)              ← Presentation
 
 - `ITrackRepository.Remove(int)` для seed-трека (`IsBuiltIn=true`) **обязан** бросать `NotSupportedException`. Контракт прописан в XML-doc, реализация в `SqliteTrackRepository` это уже соблюдает; не сломай.
 - `BuiltInTrackSeeder` сравнивает существующие seed-треки по `(Artist, Title)`. Если `FilePath`/`CoverPath` расходятся с текущим `AppContext.BaseDirectory` — он **обновит** их через `ITrackRepository.Update`. Это лечит «file not found» после переезда сборки между `bin/Debug` ↔ `bin/Release` ↔ установленный путь.
-- `MapEntityToTrack` в `SqliteListeningHistoryRepository` и в `SqliteTrackRepository` обязан переносить `IsBuiltIn`. Иначе history-replay вернёт встроенный трек с `IsBuiltIn=false`, и UI разрешит удалить shipped-файлы.
+- `TrackMapper.ToDomain` (`MusicBakh.Infrastructure/Persistence/`) — единственный маппинг `TrackEntity → Track` для треков, истории, плейлистов и поиска; он обязан переносить `IsBuiltIn`. Иначе history-replay вернёт встроенный трек с `IsBuiltIn=false`, и UI разрешит удалить shipped-файлы. Не заводи локальные копии маппинга в репозиториях.
 
 ### Расположение пользовательских данных
 

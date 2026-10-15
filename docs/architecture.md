@@ -50,7 +50,7 @@
     MusicBakh.Application + MusicBakh.Core
 ```
 
-Presentation и Infrastructure — два независимых конкретных слоя. Оба ссылаются на Application/Core, но друг на друга не ссылаются. Зависимости между конкретными реализациями разрешаются только через DI-контейнер в `App.OnStartup`.
+Presentation ссылается на Core, Application и Infrastructure: App.OnStartup является composition root и регистрирует реализации через DI. Core не зависит от EF/WPF. Общий внутренний TrackMapper находится в Infrastructure; переносить EF-сущности в Core не требуется.
 
 ## Каталоги проекта
 
@@ -193,7 +193,7 @@ SQLite-файл создаётся автоматически при перво�
 
 ## EF Core миграции
 
-Миграции находятся в [`MusicBakh.Infrastructure/Persistence/Migrations/`](../MusicBakh.Infrastructure/Persistence/Migrations/). `Database.Migrate()` применяет их при каждом запуске приложения идемпотентно.
+Миграции находятся в [`MusicBakh.Infrastructure/Persistence/Migrations/`](../MusicBakh.Infrastructure/Persistence/Migrations/). `DatabaseMaintenance.Migrate()` проверяет pending migrations. Перед изменением существующей схемы создаётся согласованная копия SQLite через BackupDatabase (включая WAL), затем вызывается Database.Migrate(). Ошибка копирования/миграции останавливает запуск с диагностикой; автоматического удаления/сброса БД нет.
 
 | Миграция | Что добавляет |
 |---|---|
@@ -220,10 +220,10 @@ SQLite-файл создаётся автоматически при перво�
 SELECT t.* FROM Tracks t
 JOIN TracksFts f ON f.rowid = t.Id
 WHERE TracksFts MATCH @query
-ORDER BY bm25(TracksFts) LIMIT @limit
+ORDER BY bm25(TracksFts), t.Id LIMIT @limit
 ```
 
-Пользовательская строка проходит через `FtsQueryBuilder.Build`, который чистит зарезервированные FTS-символы (`" * : ( )`), оборачивает каждое слово в кавычки + `*` (prefix-match), склеивает пробелом (неявный AND), режет на 10 токенов. Пустой/некорректный ввод → null → `ISearchService.Search` возвращает пустой список без SQL-запроса.
+Запросы длиннее 4096 символов отклоняются без SQL. UI запрашивает кандидатов в пределах размера загруженной библиотеки, затем применяет жанр/рейтинг/теги, сохраняя FTS-порядок; прежний LIMIT 500 до фильтрации скрывал совпадения. Пользовательская строка проходит через `FtsQueryBuilder.Build`, который чистит зарезервированные FTS-символы (`" * : ( )`), оборачивает каждое слово в кавычки + `*` (prefix-match), склеивает пробелом (неявный AND), режет на 10 токенов. Пустой/некорректный ввод → null → `ISearchService.Search` возвращает пустой список без SQL-запроса.
 
 Admin-команды для ручной починки индекса (не выставлены в UI):
 - `INSERT INTO TracksFts(TracksFts) VALUES('rebuild');` — пересборка индекса из `Tracks`.
@@ -441,3 +441,14 @@ SelectedTrack ─── PlayPauseCommand ──▶ MediaPlayerAudioService.Open(
 ## Сборка
 
 См. [release-checklist.md](release-checklist.md). Краткий тех-список: `net10.0-windows`, `WinExe`, `UseWPF=true`, в Release-конфигурации `RuntimeIdentifier=win-x64`, `SelfContained=true`, `PublishSingleFile=true`, `EnableCompressionInSingleFile=true`, `PublishReadyToRun=false`.
+
+## Уточнения после аудита 2026-09-18
+
+- Очередь хранит позицию, а не только Id: повторения трека в плейлисте допустимы. Resume сохраняет снимок; отсутствующий файл не меняет очередь продолжающего играть трека.
+- TogglePlaybackCommand управляет PlayingTrack независимо от SelectedTrack. Редактор в средней колонке относится к SelectedTrack; транспорт закреплён снизу. Команды/подсветка строк внутри LeftColumnState-шаблонов берутся с DataContext окна.
+- Теги загружаются одной пакетной выборкой GetTagsByTrack; фильтрация использует кэш. После мутаций обновляются отображение и агрегаты; Back разрешает актуальное содержимое детали.
+- Импорт владеет созданными копиями до подтверждения, поддерживает отмену и дедлайн 2 минуты; неудачные и отменённые кандидаты очищаются. Исходные файлы не удаляются. Callback сохранения вызывается до закрытия окна: ошибка БД оставляет кандидата для повторного сохранения, отмена очищает его копии. Аварийное завершение процесса может оставить файлы; автоматической очистки неизвестных файлов нет.
+- Ожидаемые ошибки SQLite/файлов показываются пользователю. Ошибки истории/настроек не прерывают аудио. Локальный musicbakh.log ротируется при следующем запуске после 2 MiB, остаётся одна previous-копия; данные никуда не отправляются.
+- WPF Application ставит OnStartup в очередь даже без Run. Render-тест создаёт App(startServices:false), загружает реальные ресурсы и обрабатывает UI-события без production host/БД.
+- Старые JSON/composite-адаптеры не являются активным runtime-хранилищем. Миграционный путь сохранён для старых библиотек.
+- Полный список изменений, проверок и оставшихся ограничений: [итог аудита](audit-2026-09-17.md), [журнал работы](hardening-2026-09-18.md).
