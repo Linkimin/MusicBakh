@@ -1,6 +1,6 @@
 namespace MusicBakh.Core.Domain;
 
-/// <summary>Активный режим левой колонки: плоский список треков, альбомы или исполнители.</summary>
+/// <summary>Активный режим левой колонки: плоский список треков, альбомы, исполнители или плейлисты.</summary>
 public enum MainViewMode
 {
     Tracks = 0,
