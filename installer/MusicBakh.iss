@@ -7,7 +7,7 @@
 #define MyAppName "MusicBakh"
 #define MyAppPublisher "Matvey Bakhmatov"
 #define MyAppExeName "MusicBakh.exe"
-#define MyAppURL "https://github.com/Linkimin/MusicLibraryRelize"
+#define MyAppURL "https://github.com/Linkimin/MusicBakh"
 
 [Setup]
 ; Уникальный AppId — менять нельзя, иначе обновление поверх установится как новое приложение.

@@ -44,7 +44,7 @@ public sealed class MusicBrainzClient : IMusicBrainzClient
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.UserAgent.ParseAdd("MusicBakh/1.0 (https://github.com/Linkimin/MusicLibraryRelize)");
+            request.Headers.UserAgent.ParseAdd("MusicBakh/1.0 (https://github.com/Linkimin/MusicBakh)");
             using HttpResponseMessage response = await _httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
