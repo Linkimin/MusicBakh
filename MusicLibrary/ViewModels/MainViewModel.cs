@@ -2,7 +2,6 @@ using MusicBakh.Application.Abstractions;
 using MusicBakh.Application.Contracts;
 using MusicBakh.Core.Abstractions;
 using MusicBakh.Core.Domain;
-using MusicBakh.Infrastructure.Playback;
 using MusicLibrary.Commands;
 using MusicLibrary.Services.Library;
 using MusicLibrary.Views;
@@ -26,6 +25,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private readonly List<Track> _allTracks;
     private readonly ITrackRepository _trackRepository;
     private readonly IFileService _fileService;
+    private readonly IMusicStoragePaths? _storagePaths;
     private readonly ISaveFileDialogService _saveFileDialogService;
     private readonly IAudioPlayerService _audioPlayerService;
     private readonly IAddTrackDialogService? _addTrackDialogService;
@@ -38,6 +38,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private readonly ITagRepository? _tagRepository;
     private readonly PlaylistsViewModel? _playlists;
     private readonly DispatcherTimer _progressTimer;
+    private bool _isDisposed;
 
     private string _selectedGenre = AllGenres;
     private string _searchText = string.Empty;
@@ -72,6 +73,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     // history replay) снимает снимок текущего DisplayedTracks в очередь — так next/prev продолжают
     // ходить по видимой библиотеке, как и раньше. См. docs/superpowers/plans (smoke-fix Task «playback queue»).
     private List<Track> _playbackQueue = new();
+    private int _queueIndex = -1;
 
     public MainViewModel(
         ITrackRepository trackRepository,
@@ -86,10 +88,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         IStatsWindowService? statsWindowService = null,
         ITagRepository? tagRepository = null,
         ITagsWindowService? tagsWindowService = null,
-        PlaylistsViewModel? playlists = null)
+        PlaylistsViewModel? playlists = null,
+        IMusicStoragePaths? storagePaths = null)
     {
         _trackRepository = trackRepository;
         _fileService = fileService;
+        _storagePaths = storagePaths;
         _saveFileDialogService = saveFileDialogService;
         _audioPlayerService = audioPlayerService;
         _listeningHistoryRepository = listeningHistoryRepository;
@@ -102,18 +106,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _tagRepository = tagRepository;
         _playlists = playlists;
         _selectedTagIds.CollectionChanged += (_, _) => ApplyFilters();
-        LoadTagFilters();
-
         _allTracks = new List<Track>(trackRepository.GetAll());
-
-        // Заполняем кэш тегов при старте: один запрос на трек.
-        if (_tagRepository is not null)
-        {
-            foreach (var t in _allTracks)
-            {
-                _tagsByTrackId[t.Id] = new ObservableCollection<Tag>(_tagRepository.GetTagsForTrack(t.Id));
-            }
-        }
+        LoadTagFilters();
 
         DisplayedTracks = new ObservableCollection<Track>(_allTracks);
         // Начальные агрегаты считаем от полного списка треков (фильтров ещё нет).
@@ -129,37 +123,38 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             PlaybackHistory.Add(entry);
         }
 
-        PlayPauseCommand = new RelayCommand(_ => PlayOrPause(), _ => SelectedTrack is not null);
-        StopCommand = new RelayCommand(_ => Stop(), _ => PlayingTrack is not null);
-        SaveTrackCommand = new RelayCommand(_ => SaveSelectedTrack(), _ => SelectedTrack is not null);
-        AddTrackCommand = new RelayCommand(_ => OpenAddTrackDialog(), _ => _addTrackDialogService is not null);
-        DeleteTrackCommand = new RelayCommand(_ => DeleteSelectedTrack(), _ => CanDeleteSelected);
-        PlayTrackCommand = new RelayCommand(
+        PlayPauseCommand = CreateCommand(_ => PlayOrPause(), _ => SelectedTrack is not null || PlayingTrack is not null);
+        TogglePlaybackCommand = CreateCommand(_ => PlayOrPause(PlayingTrack ?? SelectedTrack), _ => PlayingTrack is not null || SelectedTrack is not null);
+        StopCommand = CreateCommand(_ => Stop(), _ => PlayingTrack is not null);
+        SaveTrackCommand = CreateCommand(_ => SaveSelectedTrack(), _ => SelectedTrack is not null);
+        AddTrackCommand = CreateCommand(_ => OpenAddTrackDialog(), _ => _addTrackDialogService is not null);
+        DeleteTrackCommand = CreateCommand(_ => DeleteSelectedTrack(), _ => CanDeleteSelected);
+        PlayTrackCommand = CreateCommand(
             parameter => PlaySpecificTrack(parameter as Track),
             parameter => parameter is Track);
-        ReplayHistoryEntryCommand = new RelayCommand(
+        ReplayHistoryEntryCommand = CreateCommand(
             parameter => ReplayHistoryEntry(parameter as PlaybackEntry),
             parameter => parameter is PlaybackEntry);
-        OpenStatsCommand = new RelayCommand(
+        OpenStatsCommand = CreateCommand(
             _ => _statsWindowService?.Show(),
             _ => _statsWindowService is not null);
-        OpenTagsCommand = new RelayCommand(
+        OpenTagsCommand = CreateCommand(
             _ => _tagsWindowService?.Show(),
             _ => _tagsWindowService is not null);
         // Рейтинг и реакция — пользовательская оценка, разрешена и для встроенных
         // треков (UI ограничивает только удаление seed-треков, не их оценку).
-        SetRatingCommand = new RelayCommand(
+        SetRatingCommand = CreateCommand(
             parameter => SetRatingOnSelected(parameter),
             _ => SelectedTrack is not null);
-        SetReactionCommand = new RelayCommand(
+        SetReactionCommand = CreateCommand(
             parameter => SetReactionOnSelected(parameter),
             _ => SelectedTrack is not null);
-        ToggleTagFilterCommand = new RelayCommand(parameter => ToggleTagFilter(parameter as TagFilterItem));
-        RefreshTagFiltersCommand = new RelayCommand(_ => LoadTagFilters());
-        ClearFiltersCommand = new RelayCommand(_ => ClearFilters());
+        ToggleTagFilterCommand = CreateCommand(parameter => ToggleTagFilter(parameter as TagFilterItem));
+        RefreshTagFiltersCommand = CreateCommand(_ => { LoadTagFilters(); ApplyFilters(); });
+        ClearFiltersCommand = CreateCommand(_ => ClearFilters());
 
         // Прикрепляем тег к выбранному треку и обновляем кэш.
-        AttachTagToSelectedCommand = new RelayCommand(parameter =>
+        AttachTagToSelectedCommand = CreateCommand(parameter =>
         {
             if (SelectedTrack is null || _tagRepository is null) return;
             if (parameter is not Tag tag) return;
@@ -170,10 +165,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 _tagsByTrackId[SelectedTrack.Id] = new ObservableCollection<Tag>();
             _tagsByTrackId[SelectedTrack.Id].Add(tag);
             OnPropertyChanged(nameof(AvailableTagsForAttach));
+            ApplyFilters();
         });
 
         // Открепляем тег от выбранного трека и обновляем кэш.
-        DetachTagFromSelectedCommand = new RelayCommand(parameter =>
+        DetachTagFromSelectedCommand = CreateCommand(parameter =>
         {
             if (SelectedTrack is null || _tagRepository is null) return;
             if (parameter is not Tag tag) return;
@@ -184,9 +180,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 if (existingTag is not null) collection.Remove(existingTag);
             }
             OnPropertyChanged(nameof(AvailableTagsForAttach));
+            ApplyFilters();
         });
-        SetReactionFilterCommand = new RelayCommand(parameter => SetReactionFilter(parameter));
-        SetMinRatingCommand = new RelayCommand(parameter =>
+        SetReactionFilterCommand = CreateCommand(parameter => SetReactionFilter(parameter));
+        SetMinRatingCommand = CreateCommand(parameter =>
         {
             if (!TryParseInt(parameter, out int requested)) return;
             // Toggle: клик по уже активной звезде → 0 («Все»).
@@ -195,17 +192,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             MinRating = MinRating == clamped ? 0 : clamped;
         });
 
-        SkipForwardCommand = new RelayCommand(_ => SkipBy(TimeSpan.FromSeconds(10)), _ => PlayingTrack is not null);
-        SkipBackwardCommand = new RelayCommand(_ => SkipBy(TimeSpan.FromSeconds(-10)), _ => PlayingTrack is not null);
-        PreviousTrackCommand = new RelayCommand(_ => GoToTrackByOffset(-1), _ => CanGoToOffset(-1));
-        NextTrackCommand = new RelayCommand(_ => GoToTrackByOffset(+1), _ => CanGoToOffset(+1));
-        ToggleMuteCommand = new RelayCommand(_ => IsMuted = !IsMuted);
-        CycleRepeatModeCommand = new RelayCommand(_ => CycleRepeatMode());
-        SeekToCommand = new RelayCommand(parameter => SeekTo(parameter as TimeSpan?), _ => PlayingTrack is not null);
+        SkipForwardCommand = CreateCommand(_ => SkipBy(TimeSpan.FromSeconds(10)), _ => PlayingTrack is not null);
+        SkipBackwardCommand = CreateCommand(_ => SkipBy(TimeSpan.FromSeconds(-10)), _ => PlayingTrack is not null);
+        PreviousTrackCommand = CreateCommand(_ => GoToTrackByOffset(-1), _ => CanGoToOffset(-1));
+        NextTrackCommand = CreateCommand(_ => GoToTrackByOffset(+1), _ => CanGoToOffset(+1));
+        ToggleMuteCommand = CreateCommand(_ => IsMuted = !IsMuted);
+        CycleRepeatModeCommand = CreateCommand(_ => CycleRepeatMode());
+        SeekToCommand = CreateCommand(parameter => SeekTo(parameter as TimeSpan?), _ => PlayingTrack is not null);
 
         // Навигация левой колонки: SwitchView сбрасывает back-стек и переустанавливает корень,
         // OpenAlbum/OpenArtist пушат текущее состояние перед drill-down, Back — снимает верхнее.
-        SwitchViewCommand = new RelayCommand(p =>
+        SwitchViewCommand = CreateCommand(p =>
         {
             if (p is not MainViewMode mode) return;
             ActiveView = mode;
@@ -221,7 +218,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(CanGoBack));
         });
 
-        OpenAlbumCommand = new RelayCommand(p =>
+        OpenAlbumCommand = CreateCommand(p =>
         {
             if (p is not AlbumAggregate album) return;
             _navStack.Push(_currentLeftColumn);
@@ -229,7 +226,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(CanGoBack));
         });
 
-        OpenArtistCommand = new RelayCommand(p =>
+        OpenArtistCommand = CreateCommand(p =>
         {
             if (p is not ArtistAggregate artist) return;
             _navStack.Push(_currentLeftColumn);
@@ -237,26 +234,26 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(CanGoBack));
         });
 
-        BackCommand = new RelayCommand(_ =>
+        BackCommand = CreateCommand(_ =>
         {
             if (_navStack.Count == 0) return;
-            CurrentLeftColumn = _navStack.Pop();
+            CurrentLeftColumn = RefreshDetail(_navStack.Pop());
             OnPropertyChanged(nameof(CanGoBack));
         }, _ => _navStack.Count > 0);
 
-        PlayAlbumCommand = new RelayCommand(p =>
+        PlayAlbumCommand = CreateCommand(p =>
         {
             if (p is not AlbumAggregate album || album.Tracks.Count == 0) return;
             ReplaceQueueAndPlay(album.Tracks, shuffle: false);
         });
 
-        ShuffleAlbumCommand = new RelayCommand(p =>
+        ShuffleAlbumCommand = CreateCommand(p =>
         {
             if (p is not AlbumAggregate album || album.Tracks.Count == 0) return;
             ReplaceQueueAndPlay(album.Tracks, shuffle: true);
         });
 
-        PlayArtistCommand = new RelayCommand(p =>
+        PlayArtistCommand = CreateCommand(p =>
         {
             if (p is not ArtistAggregate artist) return;
             var all = artist.Albums.SelectMany(a => a.Tracks).Concat(artist.LooseTracks).ToList();
@@ -264,7 +261,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             ReplaceQueueAndPlay(all, shuffle: false);
         });
 
-        ShuffleArtistCommand = new RelayCommand(p =>
+        ShuffleArtistCommand = CreateCommand(p =>
         {
             if (p is not ArtistAggregate artist) return;
             var all = artist.Albums.SelectMany(a => a.Tracks).Concat(artist.LooseTracks).ToList();
@@ -275,7 +272,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // Воспроизведение трека, кликнутого прямо на detail-странице альбома/исполнителя (bug #4).
         // Очередь строится из треклиста ИМЕННО той детали, что сейчас открыта в CurrentLeftColumn —
         // не из DisplayedTracks (которая продолжает показывать вкладку «Треки»).
-        PlayDetailTrackCommand = new RelayCommand(p =>
+        PlayDetailTrackCommand = CreateCommand(p =>
         {
             if (p is not Track track) return;
             IReadOnlyList<Track>? queueSource = _currentLeftColumn switch
@@ -290,24 +287,24 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         // Плейлисты (ADR-0002): CRUD/членство живёт в PlaylistsViewModel, здесь — только
         // навигация в CurrentLeftColumn и воспроизведение через общий ReplaceQueueAndPlay.
-        OpenPlaylistCommand = new RelayCommand(p =>
+        OpenPlaylistCommand = CreateCommand(p =>
         {
             if (p is not Playlist pl || _playlists is null) return;
             _navStack.Push(_currentLeftColumn);
             CurrentLeftColumn = new LeftColumnState.PlaylistDetail(_playlists.BuildView(pl.Id));
             OnPropertyChanged(nameof(CanGoBack));
         });
-        PlayPlaylistCommand = new RelayCommand(p =>
+        PlayPlaylistCommand = CreateCommand(p =>
         {
             if (p is not PlaylistView v || v.Tracks.Count == 0) return;
             ReplaceQueueAndPlay(v.Tracks, shuffle: false);
         });
-        ShufflePlaylistCommand = new RelayCommand(p =>
+        ShufflePlaylistCommand = CreateCommand(p =>
         {
             if (p is not PlaylistView v || v.Tracks.Count == 0) return;
             ReplaceQueueAndPlay(v.Tracks, shuffle: true);
         });
-        PlayPlaylistTrackCommand = new RelayCommand(p =>
+        PlayPlaylistTrackCommand = CreateCommand(p =>
         {
             if (p is not Track track || _currentLeftColumn is not LeftColumnState.PlaylistDetail d) return;
             ReplaceQueueAndPlay(d.Playlist.Tracks, shuffle: false, selectedTrack: track);
@@ -318,12 +315,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // TrackContextMenuBehavior при открытии меню — команды здесь только применяют мутацию.
         // Ре-резолв открытой детали НЕ вызывается вручную: под-VM поднимает PlaylistContentChanged,
         // обработчик OnPlaylistContentChanged (подписан ниже) сам пересобирает деталь.
-        AddContextToPlaylistCommand = new RelayCommand(p =>
+        AddContextToPlaylistCommand = CreateCommand(p =>
         {
             if (_playlists is null || p is not Playlist pl) return;
             _playlists.AddContextTargetToPlaylist(pl);
         });
-        RemovePlaylistTrackCommand = new RelayCommand(p =>
+        RemovePlaylistTrackCommand = CreateCommand(p =>
         {
             if (_playlists is null || _currentLeftColumn is not LeftColumnState.PlaylistDetail d) return;
             if (p is not int position) return;
@@ -335,12 +332,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // DragDropListHelper по факту Drop (позиция/id уже посчитаны там через ReorderMath —
         // здесь только применение к под-VM). Ре-резолв — тем же событийным путём
         // (PlaylistContentChanged → OnPlaylistContentChanged), вручную не зовём.
-        DropTracksOnPlaylistCommand = new RelayCommand(p =>
+        DropTracksOnPlaylistCommand = CreateCommand(p =>
         {
             if (_playlists is null || p is not (Playlist pl, IReadOnlyList<int> ids)) return;
             _playlists.AddTracksByIds(pl.Id, ids);
         });
-        ReorderPlaylistCommand = new RelayCommand(p =>
+        ReorderPlaylistCommand = CreateCommand(p =>
         {
             if (_playlists is null || _currentLeftColumn is not LeftColumnState.PlaylistDetail d) return;
             if (p is not (int from, int to)) return;
@@ -352,14 +349,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         if (_playlists is not null)
         {
             _playlists.PlaylistContentChanged += OnPlaylistContentChanged;
+            _playlists.PropertyChanged += OnPlaylistsPropertyChanged;
         }
 
-        _audioPlayerService.MediaOpened += (_, filePath) => HandleMediaOpened(filePath);
-        _audioPlayerService.MediaEnded += (_, _) => HandleMediaEnded();
-        _audioPlayerService.MediaFailed += (_, message) => HandleMediaFailed(message);
+        _audioPlayerService.MediaOpened += OnMediaOpened;
+        _audioPlayerService.MediaEnded += OnMediaEnded;
+        _audioPlayerService.MediaFailed += OnMediaFailed;
 
         _progressTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-        _progressTimer.Tick += (_, _) => RefreshProgress();
+        _progressTimer.Tick += OnProgressTick;
     }
 
     public ObservableCollection<Track> DisplayedTracks { get; }
@@ -375,6 +373,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public IReadOnlyList<Track> PlaybackQueue => _playbackQueue;
 
     public ICommand PlayPauseCommand { get; }
+    public ICommand TogglePlaybackCommand { get; }
     public ICommand StopCommand { get; }
     public ICommand SaveTrackCommand { get; }
     public ICommand AddTrackCommand { get; }
@@ -683,6 +682,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         set
         {
             // Жёсткий clamp перед записью в плеер — UI слайдеру удобнее не знать про границы.
+            if (!double.IsFinite(value)) return;
             double clamped = Math.Clamp(value, 0.0, 1.0);
             if (SetProperty(ref _volume, clamped))
             {
@@ -737,8 +737,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
-    public string CurrentPositionText => CurrentPosition.ToString(@"m\:ss");
-    public string CurrentDurationText => CurrentDuration == TimeSpan.Zero ? "0:00" : CurrentDuration.ToString(@"m\:ss");
+    public string CurrentPositionText => PlaybackTime.Format(CurrentPosition);
+    public string CurrentDurationText => PlaybackTime.Format(CurrentDuration);
     public double ProgressValue => CurrentPosition.TotalSeconds;
     public double ProgressMaximum => Math.Max(CurrentDuration.TotalSeconds, 1);
 
@@ -785,7 +785,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             bool confirmed = _confirmationService.Confirm(
                 "Удалить трек",
-                $"Удалить «{track.Artist} — {track.Title}» из библиотеки? Файл и обложка будут удалены безвозвратно.");
+                $"Удалить «{track.Artist} — {track.Title}» из библиотеки? Импортированная копия и её обложка будут удалены. Исходники вне папки библиотеки сохранятся.");
             if (!confirmed)
             {
                 return;
@@ -798,16 +798,31 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
 
         _trackRepository.Remove(track.Id);
-        _fileService.Delete(track.FilePath);
-        _fileService.Delete(track.CoverPath);
+        var audioResult = DeleteManagedTrackFile(track.FilePath, _storagePaths?.MusicDirectory, track.Id);
+        var coverResult = DeleteManagedTrackFile(track.CoverPath, _storagePaths?.CoversDirectory, track.Id);
         RemoveTrack(track);
-        SetStatus(OperationResult.Success($"Трек «{track.Title}» удалён."));
+        SetStatus(!audioResult.IsSuccess ? audioResult : !coverResult.IsSuccess ? coverResult
+            : OperationResult.Success($"Трек «{track.Title}» удалён из библиотеки."));
+    }
+
+    private OperationResult DeleteManagedTrackFile(string path, string? directory, int trackId)
+    {
+        if (directory is null || string.IsNullOrWhiteSpace(path)
+            || !string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)
+            || _allTracks.Any(t => t.Id != trackId && ((!string.IsNullOrWhiteSpace(t.FilePath) && IsSamePath(t.FilePath, path)) || (!string.IsNullOrWhiteSpace(t.CoverPath) && IsSamePath(t.CoverPath, path)))))
+            return OperationResult.Info("Исходный или общий файл сохранён.");
+        var result = _fileService.Delete(path);
+        return result.IsSuccess ? result : OperationResult.Error($"Запись удалена, но файл остался: {result.Message}");
     }
 
     private void RemoveTrack(Track track)
     {
-        _allTracks.Remove(track);
-        DisplayedTracks.Remove(track);
+        _allTracks.RemoveAll(t => t.Id == track.Id);
+        int removedBefore = _playbackQueue.Take(Math.Max(_queueIndex, 0)).Count(t => t.Id == track.Id);
+        _playbackQueue.RemoveAll(t => t.Id == track.Id);
+        _queueIndex -= removedBefore;
+        for (int i = PlaybackHistory.Count - 1; i >= 0; i--)
+            if (PlaybackHistory[i].Track.Id == track.Id) PlaybackHistory.RemoveAt(i);
 
         // Если последний трек этого жанра ушёл — убираем жанр из фильтра.
         if (!_allTracks.Any(t => t.Genre == track.Genre) && Genres.Contains(track.Genre))
@@ -819,13 +834,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             }
         }
 
-        if (SelectedTrack == track)
+        if (SelectedTrack?.Id == track.Id)
         {
             SelectedTrack = null;
         }
 
         // Удаляем запись кэша тегов вместе с треком.
         _tagsByTrackId.Remove(track.Id);
+        ApplyFilters();
+        CommandManager.InvalidateRequerySuggested();
     }
 
     private void SetRatingOnSelected(object? parameter)
@@ -895,12 +912,25 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         if (wasSelected) SelectedTrack = updated;
         if (wasPlaying) PlayingTrack = updated;
+        for (int i = 0; i < _playbackQueue.Count; i++)
+            if (_playbackQueue[i].Id == updated.Id) _playbackQueue[i] = updated;
+        ApplyFilters();
     }
 
     private void LoadTagFilters()
     {
         if (_tagRepository is null) return;
         var fresh = _tagRepository.GetAll();
+        var associations = _tagRepository.GetTagsByTrack();
+        foreach (var track in _allTracks)
+        {
+            if (!_tagsByTrackId.TryGetValue(track.Id, out var tags))
+                _tagsByTrackId[track.Id] = tags = new ObservableCollection<Tag>();
+            tags.Clear();
+            if (associations.TryGetValue(track.Id, out var current))
+                foreach (var tag in current) tags.Add(tag);
+        }
+        OnPropertyChanged(nameof(AvailableTagsForAttach));
         var stillSelected = new HashSet<int>(_tagFilters.Where(f => f.IsSelected).Select(f => f.Tag.Id));
         _tagFilters.Clear();
         foreach (var tag in fresh)
@@ -991,23 +1021,26 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             Genres.Insert(insertIndex, track.Genre);
         }
 
-        if (SelectedGenre == AllGenres || SelectedGenre == track.Genre)
-        {
-            DisplayedTracks.Add(track);
-        }
-
         // Новый трек ещё не имеет тегов — инициализируем пустую коллекцию в кэше.
         _tagsByTrackId[track.Id] = new ObservableCollection<Tag>();
+        ApplyFilters();
     }
 
     private void ApplyFilters()
+    {
+        try { ApplyFiltersCore(); }
+        catch (Exception ex) when (Services.StorageErrors.IsExpected(ex)) { ReportStorageError("Не удалось обновить библиотеку", ex); }
+    }
+
+    private void ApplyFiltersCore()
     {
         // Собираем снимок активных критериев и отдаём в чистую функцию LibraryFilter.
         // Это держит метод тонким и позволяет юнит-тестам фильтра жить без WPF.
         IReadOnlyList<Track>? hits = null;
         if (!string.IsNullOrWhiteSpace(SearchText) && _searchService is not null)
         {
-            hits = _searchService.Search(SearchText);
+            // Все кандидаты нужны ДО фильтрации: LIMIT 500 скрывал совпадения других жанров/тегов.
+            hits = _searchService.Search(SearchText, Math.Max(_allTracks.Count, 1));
         }
 
         var criteria = new LibraryFilterCriteria(
@@ -1023,15 +1056,19 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // не активируется (пустой SelectedTagIds), так что делегат не позовётся.
         Func<int, IReadOnlyList<int>>? tagsProvider = _tagRepository is null
             ? null
-            : trackId => _tagRepository.GetTagsForTrack(trackId).Select(t => t.Id).ToList();
+            : trackId => _tagsByTrackId.TryGetValue(trackId, out var tags)
+                ? tags.Select(t => t.Id).ToArray() : Array.Empty<int>();
 
         var filtered = LibraryFilter.Apply(_allTracks, criteria, tagsProvider);
 
+        Track? selection = SelectedTrack;
         DisplayedTracks.Clear();
         foreach (var track in filtered)
         {
             DisplayedTracks.Add(track);
         }
+        // WPF может сбросить TwoWay SelectedItem во время Clear; редактор сохраняет выбранный трек.
+        SelectedTrack = selection is null ? null : _allTracks.FirstOrDefault(t => t.Id == selection.Id);
 
         // Computed-агрегаты пересчитываются вместе с DisplayedTracks. На 50k треков ~50ms.
         var filteredSnapshot = DisplayedTracks.ToList();
@@ -1043,7 +1080,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // на свежий агрегат из только что пересчитанных DisplayedAlbums/DisplayedArtists — иначе
         // деталь продолжит показывать треклист, снятый ДО смены фильтра. Root-состояния и back-стек
         // не трогаем (ре-резолвим только видимую CurrentLeftColumn).
-        CurrentLeftColumn = _currentLeftColumn switch
+        OnPropertyChanged(nameof(TagsByTrackId));
+        CurrentLeftColumn = RefreshDetail(_currentLeftColumn);
+    }
+
+    private LeftColumnState RefreshDetail(LeftColumnState state) => state switch
         {
             LeftColumnState.AlbumDetail albumDetail => new LeftColumnState.AlbumDetail(
                 DisplayedAlbums.FirstOrDefault(a => a.AlbumKey == albumDetail.Album.AlbumKey)
@@ -1051,9 +1092,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             LeftColumnState.ArtistDetail artistDetail => new LeftColumnState.ArtistDetail(
                 DisplayedArtists.FirstOrDefault(a => a.Name == artistDetail.Artist.Name)
                     ?? EmptyArtist(artistDetail.Artist)),
-            _ => _currentLeftColumn
+            LeftColumnState.PlaylistDetail playlistDetail when _playlists is not null =>
+                _playlists.Playlists.Any(p => p.Id == playlistDetail.Playlist.Playlist.Id)
+                    ? new LeftColumnState.PlaylistDetail(_playlists.BuildView(playlistDetail.Playlist.Playlist.Id))
+                    : new LeftColumnState.PlaylistsRoot(),
+            _ => state
         };
-    }
 
     /// <summary>
     /// Строит «пустой» агрегат альбома, сохраняя identity (Title/Artist/Year/Cover) от последнего
@@ -1129,8 +1173,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
 
         Track next = _playbackQueue[target];
+        if (!EnsureTrackExists(next)) return;
+        _queueIndex = target;
         SelectedTrack = next;
-        StartOrResumeTrack(next);
+        StartOrResumeTrack(next, forceRestart: true);
     }
 
     // Ищет играющий трек В ОЧЕРЕДИ ВОСПРОИЗВЕДЕНИЯ (_playbackQueue), а не в DisplayedTracks —
@@ -1142,14 +1188,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             return -1;
         }
 
-        for (int i = 0; i < _playbackQueue.Count; i++)
-        {
-            if (_playbackQueue[i].Id == PlayingTrack.Id)
-            {
-                return i;
-            }
-        }
-        return -1;
+        return _queueIndex >= 0 && _queueIndex < _playbackQueue.Count
+            && _playbackQueue[_queueIndex].Id == PlayingTrack.Id ? _queueIndex : -1;
     }
 
     private void CycleRepeatMode()
@@ -1162,15 +1202,16 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         };
     }
 
-    private void PlayOrPause()
+    private void PlayOrPause(Track? requested = null)
     {
-        if (SelectedTrack is null)
+        Track? target = requested ?? SelectedTrack ?? PlayingTrack;
+        if (target is null)
         {
             SetStatus(OperationResult.Error("Выберите трек."));
             return;
         }
 
-        if (IsSelectedPlaying && IsPlaying)
+        if (PlayingTrack?.Id == target.Id && IsPlaying)
         {
             _audioPlayerService.Pause();
             _progressTimer.Stop();
@@ -1182,8 +1223,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         // Воспроизведение, начатое из вкладки «Треки» (Play/Pause на выбранном треке), ходит по
         // текущей отфильтрованной библиотеке — снимаем её снимок в очередь (bug #5 fix).
-        _playbackQueue = DisplayedTracks.ToList();
-        StartOrResumeTrack(SelectedTrack);
+        if (!EnsureTrackExists(target)) return;
+        if (!_isPaused || PlayingTrack?.Id != target.Id)
+        {
+            _playbackQueue = DisplayedTracks.ToList();
+            _queueIndex = _playbackQueue.FindIndex(t => t.Id == target.Id);
+        }
+        StartOrResumeTrack(target);
     }
 
     /// <summary>
@@ -1207,17 +1253,21 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             }
         }
 
+        // Сначала сравниваем экземпляр: в плейлисте один Id может встречаться несколько раз.
+        if (queue.Count == 0) return;
+        int startIndex = selectedTrack is null ? 0 : queue.FindIndex(t => ReferenceEquals(t, selectedTrack));
+        if (startIndex < 0) startIndex = queue.FindIndex(t => t.Id == selectedTrack!.Id);
+        if (startIndex < 0) startIndex = 0;
+        Track start = queue[startIndex];
+        if (!EnsureTrackExists(start)) return;
         _playbackQueue = queue;
-
-        Track start = selectedTrack is not null
-            ? queue.FirstOrDefault(t => t.Id == selectedTrack.Id) ?? queue[0]
-            : queue[0];
+        _queueIndex = startIndex;
 
         SelectedTrack = start;
         // Не через PlayPauseCommand/PlayOrPause: тот безусловно переснимает _playbackQueue из
         // DisplayedTracks (нормальный сценарий воспроизведения из вкладки «Треки»), что затёрло бы
         // только что собранную очередь альбома/исполнителя. Здесь очередь уже собрана — просто играем.
-        StartOrResumeTrack(start);
+        StartOrResumeTrack(start, forceRestart: true);
     }
 
     private void PlaySpecificTrack(Track? track)
@@ -1236,7 +1286,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         // Двойной клик по треку в вкладке «Треки» (или replay истории) — очередь = снимок
         // текущей отфильтрованной библиотеки, чтобы next/prev продолжили по ней (bug #5 fix).
-        _playbackQueue = DisplayedTracks.ToList();
+        if (!EnsureTrackExists(track)) return;
+        if (!_isPaused || PlayingTrack?.Id != track.Id)
+        {
+            _playbackQueue = DisplayedTracks.ToList();
+            _queueIndex = _playbackQueue.FindIndex(t => t.Id == track.Id);
+        }
         StartOrResumeTrack(track);
     }
 
@@ -1250,7 +1305,14 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         PlaySpecificTrack(entry.Track);
     }
 
-    private void StartOrResumeTrack(Track track)
+    private bool EnsureTrackExists(Track track)
+    {
+        if (_fileService.Exists(track.FilePath)) return true;
+        SetStatus(OperationResult.Error($"Файл не найден: {track.FilePath}"));
+        return false;
+    }
+
+    private void StartOrResumeTrack(Track track, bool forceRestart = false)
     {
         // Every playback entry point goes through this method so the Play button,
         // library double-click, and history replay keep identical pause/history rules.
@@ -1260,7 +1322,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        bool isResume = _isPaused && PlayingTrack is not null && PlayingTrack.Id == track.Id;
+        bool isResume = !forceRestart && _isPaused && PlayingTrack is not null && PlayingTrack.Id == track.Id;
 
         if (!isResume)
         {
@@ -1344,7 +1406,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private void AddToHistory(Track track)
     {
         var entry = new PlaybackEntry { Track = track, PlayedAt = DateTime.Now };
-        _listeningHistoryRepository.Append(entry);
+        try { _listeningHistoryRepository.Append(entry); }
+        catch (Exception ex) when (MusicLibrary.Services.StorageErrors.IsExpected(ex))
+        {
+            ReportStorageError("Воспроизведение продолжается, но историю сохранить не удалось", ex);
+            return;
+        }
 
         PlaybackHistory.Insert(0, entry);
         while (PlaybackHistory.Count > MaxHistoryItems)
@@ -1436,7 +1503,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         // Авто-переход по завершении трека ходит по очереди воспроизведения (_playbackQueue),
         // не по DisplayedTracks — иначе после Play-альбома auto-next перескочил бы в вкладку «Треки».
-        Track? next = ResolveStrategy(RepeatMode).GetNext(finished, _playbackQueue);
+        int nextIndex = RepeatMode == RepeatMode.Current ? _queueIndex : _queueIndex + 1;
+        if (RepeatMode == RepeatMode.Library && nextIndex >= _playbackQueue.Count) nextIndex = 0;
+        Track? next = RepeatMode == RepeatMode.Current ? finished
+            : _queueIndex >= 0 && nextIndex >= 0 && nextIndex < _playbackQueue.Count
+                ? _playbackQueue[nextIndex] : null;
         if (next is null)
         {
             PlayingTrack = null;
@@ -1445,18 +1516,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
 
         PlayingTrack = null;
+        _queueIndex = nextIndex;
         SelectedTrack = next;
         StartOrResumeTrack(next);
-    }
-
-    private static IPlaybackQueueStrategy ResolveStrategy(RepeatMode mode)
-    {
-        return mode switch
-        {
-            RepeatMode.Current => RepeatCurrentStrategy.Instance,
-            RepeatMode.Library => RepeatLibraryStrategy.Instance,
-            _ => NoRepeatStrategy.Instance
-        };
     }
 
     // MediaFailed обрывает цепочку auto-next: иначе на повреждённой библиотеке можно уйти в каскад ошибок.
@@ -1474,8 +1536,28 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void PersistSettings()
     {
-        _playerSettingsRepository.Save(new PlayerSettings(_volume, _isMuted, _repeatMode));
+        try { _playerSettingsRepository.Save(new PlayerSettings(_volume, _isMuted, _repeatMode)); }
+        catch (Exception ex) when (MusicLibrary.Services.StorageErrors.IsExpected(ex))
+        {
+            ReportStorageError("Не удалось сохранить настройки", ex);
+        }
     }
+
+    private void ReportStorageError(string operation, Exception exception)
+    {
+        System.Diagnostics.Trace.TraceError("{0}: {1}", operation, exception);
+        SetStatus(OperationResult.Error($"{operation}: {exception.Message}"));
+    }
+
+    private RelayCommand CreateCommand(Action<object?> execute, Predicate<object?>? canExecute = null) => new(
+        p =>
+        {
+            try { execute(p); }
+            catch (Exception ex) when (MusicLibrary.Services.StorageErrors.IsExpected(ex))
+            {
+                ReportStorageError("Не удалось выполнить операцию с библиотекой", ex);
+            }
+        }, canExecute);
 
     /// <summary>
     /// Обработчик PlaylistsViewModel.PlaylistContentChanged: если сейчас открыта деталь именно
@@ -1484,16 +1566,34 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private void OnPlaylistContentChanged(int playlistId)
     {
         if (_currentLeftColumn is LeftColumnState.PlaylistDetail d && d.Playlist.Playlist.Id == playlistId)
-            CurrentLeftColumn = new LeftColumnState.PlaylistDetail(_playlists!.BuildView(playlistId));
+            CurrentLeftColumn = RefreshDetail(d);
     }
+
+    private void OnPlaylistsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PlaylistsViewModel.ErrorMessage) && _playlists?.ErrorMessage is { } error)
+            SetStatus(OperationResult.Error(error));
+    }
+
+    private void OnMediaOpened(object? sender, string path) => HandleMediaOpened(path);
+    private void OnMediaEnded(object? sender, EventArgs e) => HandleMediaEnded();
+    private void OnMediaFailed(object? sender, string message) => HandleMediaFailed(message);
+    private void OnProgressTick(object? sender, EventArgs e) => RefreshProgress();
 
     public void Dispose()
     {
+        if (_isDisposed) return;
+        _isDisposed = true;
+        _audioPlayerService.MediaOpened -= OnMediaOpened;
+        _audioPlayerService.MediaEnded -= OnMediaEnded;
+        _audioPlayerService.MediaFailed -= OnMediaFailed;
         if (_playlists is not null)
         {
             _playlists.PlaylistContentChanged -= OnPlaylistContentChanged;
+            _playlists.PropertyChanged -= OnPlaylistsPropertyChanged;
         }
         _progressTimer.Stop();
+        _progressTimer.Tick -= OnProgressTick;
         _audioPlayerService.Dispose();
     }
 }

@@ -9,6 +9,31 @@ namespace MusicLibrary.Tests.ViewModels;
 
 public sealed class MainViewModelTagAttachTests
 {
+    [Fact]
+    public void Detach_RefreshesActiveTagFilter()
+    {
+        var repo = new FakeTagRepo();
+        var tag = repo.Add(new Tag { Id = 1, Name = "Morning" });
+        repo.AttachTag(1, 1);
+        using var vm = CreateVM(new[] { new Track { Id = 1 } }, repo);
+        vm.ToggleTagFilterCommand.Execute(vm.TagFilters[0]);
+        vm.SelectedTrack = vm.DisplayedTracks[0];
+        vm.DetachTagFromSelectedCommand.Execute(tag);
+        Assert.Empty(vm.DisplayedTracks);
+    }
+
+    [Fact]
+    public void RefreshTags_RefreshesNamesInTrackCache()
+    {
+        var repo = new FakeTagRepo();
+        repo.Add(new Tag { Id = 1, Name = "Old" });
+        repo.AttachTag(1, 1);
+        using var vm = CreateVM(new[] { new Track { Id = 1 } }, repo);
+        repo.Tags[0] = new Tag { Id = 1, Name = "New" };
+        vm.RefreshTagFiltersCommand.Execute(null);
+        Assert.Equal("New", Assert.Single(vm.TagsByTrackId[1]).Name);
+    }
+
     private sealed class FakeTagRepo : ITagRepository
     {
         public List<Tag> Tags { get; } = new();
@@ -143,9 +168,9 @@ public sealed class MainViewModelTagAttachTests
 
     private sealed class FakeAudioPlayerService : IAudioPlayerService
     {
-        public event EventHandler<string>? MediaOpened;
-        public event EventHandler? MediaEnded;
-        public event EventHandler<string>? MediaFailed;
+        public event EventHandler<string>? MediaOpened { add { } remove { } }
+        public event EventHandler? MediaEnded { add { } remove { } }
+        public event EventHandler<string>? MediaFailed { add { } remove { } }
 
         public bool IsPlaying => false;
         public TimeSpan Position { get; set; }

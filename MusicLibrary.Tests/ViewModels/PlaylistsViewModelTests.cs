@@ -19,9 +19,10 @@ public sealed class PlaylistsViewModelTests
         private readonly List<Playlist> _pl = new();
         private readonly Dictionary<int, List<int>> _tracks = new();
         private int _next = 1;
+        public Exception? CreateError { get; set; }
         public IReadOnlyList<Playlist> GetAll() => _pl.OrderByDescending(p => p.Id).ToList();
         public Playlist? GetById(int id) => _pl.FirstOrDefault(p => p.Id == id);
-        public Playlist Create(string name) { var p = new Playlist(_next++, name, System.DateTime.UtcNow); _pl.Add(p); _tracks[p.Id] = new(); return p; }
+        public Playlist Create(string name) { if (CreateError is not null) throw CreateError; var p = new Playlist(_next++, name, System.DateTime.UtcNow); _pl.Add(p); _tracks[p.Id] = new(); return p; }
         public void Rename(int id, string name) { var i = _pl.FindIndex(p => p.Id == id); if (i>=0) _pl[i] = _pl[i] with { Name = name }; }
         public void Delete(int id) { _pl.RemoveAll(p => p.Id == id); _tracks.Remove(id); }
         public IReadOnlyList<Track> GetTracks(int id) => _tracks[id].Select(tid => new Track { Id = tid, Title = "t"+tid, FilePath = tid+".mp3" }).ToList();
@@ -33,6 +34,18 @@ public sealed class PlaylistsViewModelTests
     }
 
     private static PlaylistsViewModel Vm(FakePlaylistRepo repo) => new(repo, new YesConfirm(), new FakeClock());
+
+    [Fact]
+    public void StorageFailure_KeepsInputOpenAndReportsError()
+    {
+        var repo = new FakePlaylistRepo { CreateError = new System.IO.IOException("disk unavailable") };
+        var vm = Vm(repo);
+        vm.IsCreating = true;
+        vm.ConfirmNewPlaylistName("Mix");
+        Assert.True(vm.IsCreating);
+        Assert.Empty(vm.Playlists);
+        Assert.Contains("disk unavailable", vm.ErrorMessage);
+    }
 
     [Fact]
     public void CreatePlaylist_Adds_To_List()

@@ -24,6 +24,8 @@ public sealed class PlaylistsViewModel : ViewModelBase
     private readonly IClock _clock;
 
     private IReadOnlyList<Track> _contextTarget = System.Array.Empty<Track>();
+    private string? _errorMessage;
+    public string? ErrorMessage { get => _errorMessage; private set => SetProperty(ref _errorMessage, value); }
 
     public PlaylistsViewModel(IPlaylistRepository repo, IConfirmationService confirm, IClock clock)
     {
@@ -60,64 +62,77 @@ public sealed class PlaylistsViewModel : ViewModelBase
 
     public void RefreshPlaylists()
     {
+        var fresh = _repo.GetAll();
         Playlists.Clear();
-        foreach (var p in _repo.GetAll()) Playlists.Add(p);
+        foreach (var p in fresh) Playlists.Add(p);
     }
 
     public void ConfirmNewPlaylistName(string? name)
-    {
+    => ExecuteStorage(() => {
         var final = string.IsNullOrWhiteSpace(name) ? DefaultName : name.Trim();
         _repo.Create(final);
         IsCreating = false;
         RefreshPlaylists();
-    }
+    });
 
     public void RenamePlaylist(Playlist p, string? name)
-    {
+    => ExecuteStorage(() => {
         var final = string.IsNullOrWhiteSpace(name) ? p.Name : name.Trim();
         _repo.Rename(p.Id, final);
         EditingPlaylistId = null;
         RefreshPlaylists();
-    }
+        PlaylistContentChanged?.Invoke(p.Id);
+    });
 
     public void DeletePlaylist(Playlist p)
-    {
+    => ExecuteStorage(() => {
         if (!_confirm.Confirm("Удалить плейлист", $"Удалить плейлист «{p.Name}»? Треки в библиотеке останутся."))
             return;
         _repo.Delete(p.Id);
         RefreshPlaylists();
-    }
+        PlaylistContentChanged?.Invoke(p.Id);
+    });
 
     public void SetContextTarget(IReadOnlyList<Track> tracks) => _contextTarget = tracks ?? System.Array.Empty<Track>();
 
     public void AddContextTargetToPlaylist(Playlist p)
-    {
+    => ExecuteStorage(() => {
         if (_contextTarget.Count == 0) return;
         _repo.AddTracks(p.Id, _contextTarget.Select(t => t.Id).ToList());
         RefreshPlaylists();
         PlaylistContentChanged?.Invoke(p.Id);
-    }
+    });
 
     public void AddTracksByIds(int playlistId, IReadOnlyList<int> ids)
-    {
+    => ExecuteStorage(() => {
         if (ids.Count == 0) return;
         _repo.AddTracks(playlistId, ids);
         RefreshPlaylists();
         PlaylistContentChanged?.Invoke(playlistId);
-    }
+    });
 
     public void RemoveTrackAt(int playlistId, int position)
-    {
+    => ExecuteStorage(() => {
         _repo.RemoveAt(playlistId, position);
         RefreshPlaylists();
         PlaylistContentChanged?.Invoke(playlistId);
-    }
+    });
 
     public void Reorder(int playlistId, int from, int to)
-    {
+    => ExecuteStorage(() => {
         _repo.Reorder(playlistId, from, to);
         RefreshPlaylists();
         PlaylistContentChanged?.Invoke(playlistId);
+    });
+
+    private void ExecuteStorage(Action action)
+    {
+        try { action(); ErrorMessage = null; }
+        catch (Exception ex) when (Services.StorageErrors.IsExpected(ex))
+        {
+            System.Diagnostics.Trace.TraceError("Playlist operation: {0}", ex);
+            ErrorMessage = $"Не удалось изменить плейлист: {ex.Message}";
+        }
     }
 
     public PlaylistView BuildView(int playlistId)
