@@ -40,12 +40,20 @@
          (TwoWay) при этом продолжает отражать "основной" выбранный трек для Play/Save/Delete —
          WPF синхронизирует его с последним элементом SelectedItems. -->
     <DataTemplate x:Key="TracksRootTemplate">
+        <Grid>
         <ListBox ItemsSource="{Binding DataContext.DisplayedTracks, RelativeSource={RelativeSource AncestorType=Window}}"
                  SelectedItem="{Binding DataContext.SelectedTrack, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
                  SelectionMode="Extended"
                  ItemTemplate="{StaticResource TrackCardTemplate}"
                  ItemContainerStyle="{StaticResource TrackListBoxItemStyle}"
                  Style="{StaticResource PanelListBoxStyle}" />
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20"
+                    Visibility="{Binding DataContext.DisplayedTracks.Count, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource CountToVisibilityConverter}, ConverterParameter=Invert}">
+            <TextBlock Text="Треки не найдены" FontSize="18" Foreground="{StaticResource ForegroundBrush}" TextAlignment="Center"/>
+            <TextBlock Text="Измените поиск, сбросьте фильтры или добавьте музыку." FontSize="13" Foreground="{StaticResource MutedForegroundBrush}" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,12"/>
+            <Button Content="Сбросить фильтры" Command="{Binding DataContext.ClearFiltersCommand, RelativeSource={RelativeSource AncestorType=Window}}" Style="{StaticResource SecondaryButtonStyle}"/>
+        </StackPanel>
+        </Grid>
     </DataTemplate>
 
     <!-- ========== Albums view: 3xN сетка плиток ========== -->

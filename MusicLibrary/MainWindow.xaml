@@ -11,10 +11,61 @@
         MinWidth="980"
         MinHeight="640"
         FontFamily="{StaticResource BodyFont}"
+        FontSize="14"
         Background="{StaticResource BackgroundBrush}"
         KeyDown="Window_KeyDown">
+<Window.Resources>
+                            <Style x:Key="PlayPauseIconStyle" TargetType="Path">
+                                <Setter Property="Data" Value="{StaticResource IconPlayGeometry}" />
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+
+                                            <Condition Binding="{Binding IsPlaying}" Value="True" />
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Data" Value="{StaticResource IconPauseGeometry}" />
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+
+                            <Style x:Key="MuteIconStyle" TargetType="Path">
+                                <Setter Property="Data" Value="{StaticResource IconVolumeGeometry}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsMuted}" Value="True">
+                                        <Setter Property="Data" Value="{StaticResource IconMutedGeometry}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+
+                            <Style x:Key="RepeatIconStyle" TargetType="Path">
+                                <Setter Property="Fill" Value="{StaticResource MutedForegroundBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding RepeatMode}" Value="Current">
+                                        <Setter Property="Fill" Value="{StaticResource PrimaryBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding RepeatMode}" Value="Library">
+                                        <Setter Property="Fill" Value="{StaticResource PrimaryBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+
+                            <Style x:Key="RepeatLabelStyle" TargetType="TextBlock">
+                                <Setter Property="Text" Value="Off" />
+                                <Setter Property="Foreground" Value="{StaticResource MutedForegroundBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding RepeatMode}" Value="Current">
+                                        <Setter Property="Text" Value="1" />
+                                        <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding RepeatMode}" Value="Library">
+                                        <Setter Property="Text" Value="All" />
+                                        <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Window.Resources>
     <Window.InputBindings>
-        <KeyBinding Key="Space" Command="{Binding PlayPauseCommand}" />
+        <KeyBinding Key="Space" Command="{Binding TogglePlaybackCommand}" />
         <!-- Все буквенные хоткеи — с Ctrl, чтобы не блокировать ввод этих букв
              в поле поиска и других TextBox-ах (в русской раскладке R=К, M=Ь). -->
         <KeyBinding Key="M" Modifiers="Control" Command="{Binding ToggleMuteCommand}" />
@@ -56,31 +107,32 @@
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="106" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border Background="{StaticResource CardOverlayBrush}" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,0,1" Padding="28,18">
-            <DockPanel VerticalAlignment="Center">
-                <Button DockPanel.Dock="Right" Content="＋ Добавить трек" Command="{Binding AddTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" Height="42" Padding="18,0" />
-                <Button DockPanel.Dock="Right" Content="Статистика" Command="{Binding OpenStatsCommand}" Style="{StaticResource SecondaryButtonStyle}" Height="42" Padding="18,0" Margin="0,0,12,0" ToolTip="Ctrl+T" />
-                <Button DockPanel.Dock="Right" Content="Теги" Command="{Binding OpenTagsCommand}" Style="{StaticResource SecondaryButtonStyle}" Height="42" Padding="18,0" Margin="0,0,12,0" ToolTip="Ctrl+G" />
+        <Border x:Name="LibraryHeader" Background="{StaticResource CardOverlayBrush}" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,0,1" Padding="20,8">
+            <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><DockPanel Grid.Row="0" VerticalAlignment="Center">
+                <Button DockPanel.Dock="Right" Content="＋ Добавить трек" Command="{Binding AddTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" Height="36" Padding="14,0" FontSize="12" />
+                <Button DockPanel.Dock="Right" Content="Статистика" Command="{Binding OpenStatsCommand}" Style="{StaticResource SecondaryButtonStyle}" Height="36" Padding="14,0" FontSize="12" Margin="0,0,12,0" ToolTip="Ctrl+T" />
+                <Button DockPanel.Dock="Right" Content="Теги" Command="{Binding OpenTagsCommand}" Style="{StaticResource SecondaryButtonStyle}" Height="36" Padding="14,0" FontSize="12" Margin="0,0,12,0" ToolTip="Ctrl+G" />
 
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Image Width="54"
-                           Height="54"
+                    <Image Width="40"
+                           Height="40"
                            Source="Assets/Brand/musicbakh-logo.png"
                            Stretch="Uniform"
                            RenderOptions.BitmapScalingMode="HighQuality" />
                     <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="MusicBakh" FontFamily="{StaticResource HeadingFont}" Foreground="{StaticResource PrimaryBrush}" FontSize="28" FontWeight="SemiBold" />
+                        <TextBlock Text="MusicBakh" FontFamily="{StaticResource HeadingFont}" Foreground="{StaticResource PrimaryBrush}" FontSize="23" FontWeight="SemiBold" />
                         <TextBlock Text="Музыкальная библиотека" Foreground="{StaticResource MutedForegroundBrush}" FontSize="13" Margin="1,2,0,0" />
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Tabs занимают оставшуюся середину. -->
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="40,0,40,0">
+                </DockPanel><!-- Навигация отдельной строкой не пересекается с действиями при сужении окна. -->
+                <StackPanel x:Name="LibraryNavigation" Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,8,0,0">
                     <Button Content="Треки"
                             Command="{Binding SwitchViewCommand}">
                         <Button.CommandParameter>
@@ -158,10 +210,10 @@
                         </Button.Style>
                     </Button>
                 </StackPanel>
-            </DockPanel>
+            </Grid>
         </Border>
 
-        <Border Grid.Row="1" Style="{StaticResource FilterToolbarBorderStyle}">
+        <Border Grid.Row="1" Style="{StaticResource FilterToolbarBorderStyle}" Padding="16,10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" MinWidth="180" />
@@ -173,7 +225,7 @@
                 <TextBox x:Name="SearchBox"
                          Grid.Column="0"
                          Style="{StaticResource SearchTextBoxStyle}"
-                         Tag="Название, исполнитель, альбом, жанр…   (Ctrl+F)"
+                         Tag="Поиск по библиотеке (Ctrl+F)" Height="40"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=250}"
                          KeyDown="OnSearchBoxKeyDown"
                          VerticalAlignment="Center" />
@@ -181,7 +233,7 @@
                 <ComboBox Grid.Column="1"
                           ItemsSource="{Binding Genres}"
                           SelectedItem="{Binding SelectedGenre, Mode=TwoWay}"
-                          Style="{StaticResource GenreComboBoxStyle}"
+                          Style="{StaticResource GenreComboBoxStyle}" Height="40"
                           MinWidth="140"
                           Margin="14,0,0,0"
                           VerticalAlignment="Center" />
@@ -309,13 +361,13 @@
 
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="45*" />
-                <ColumnDefinition Width="30*" />
-                <ColumnDefinition Width="25*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="360" />
+                <ColumnDefinition Width="220" />
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Background="#4D16161F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,1,0">
-                <DockPanel Margin="24">
+                <DockPanel Margin="16">
                     <ContentControl Content="{Binding CurrentLeftColumn}">
                         <ContentControl.ContentTemplateSelector>
                             <selectors:LeftColumnTemplateSelector
@@ -331,84 +383,24 @@
                 </DockPanel>
             </Border>
 
-            <Border Grid.Column="1" Background="#3316161F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,1,0" Padding="24">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
+            <Border x:Name="TrackEditor" Grid.Column="1" Background="#3316161F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,0,1,0" Padding="16">
+                <Grid><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
                     <StackPanel VerticalAlignment="Center">
-                        <StackPanel.Resources>
-                            <Style x:Key="PlayPauseIconStyle" TargetType="Path">
-                                <Setter Property="Data" Value="{StaticResource IconPlayGeometry}" />
-                                <Style.Triggers>
-                                    <MultiDataTrigger>
-                                        <MultiDataTrigger.Conditions>
-                                            <Condition Binding="{Binding IsSelectedPlaying}" Value="True" />
-                                            <Condition Binding="{Binding IsPlaying}" Value="True" />
-                                        </MultiDataTrigger.Conditions>
-                                        <Setter Property="Data" Value="{StaticResource IconPauseGeometry}" />
-                                    </MultiDataTrigger>
-                                </Style.Triggers>
-                            </Style>
 
-                            <Style x:Key="MuteIconStyle" TargetType="Path">
-                                <Setter Property="Data" Value="{StaticResource IconVolumeGeometry}" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsMuted}" Value="True">
-                                        <Setter Property="Data" Value="{StaticResource IconMutedGeometry}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
 
-                            <Style x:Key="RepeatIconStyle" TargetType="Path">
-                                <Setter Property="Fill" Value="{StaticResource MutedForegroundBrush}" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding RepeatMode}" Value="Current">
-                                        <Setter Property="Fill" Value="{StaticResource PrimaryBrush}" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding RepeatMode}" Value="Library">
-                                        <Setter Property="Fill" Value="{StaticResource PrimaryBrush}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-
-                            <Style x:Key="RepeatLabelStyle" TargetType="TextBlock">
-                                <Setter Property="Text" Value="Off" />
-                                <Setter Property="Foreground" Value="{StaticResource MutedForegroundBrush}" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding RepeatMode}" Value="Current">
-                                        <Setter Property="Text" Value="1" />
-                                        <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding RepeatMode}" Value="Library">
-                                        <Setter Property="Text" Value="All" />
-                                        <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </StackPanel.Resources>
-
-                        <!-- Обложка/название/исполнитель/жанр/длительность биндятся на NowPlayingTrack
-                             (= PlayingTrack ?? SelectedTrack), а не на SelectedTrack напрямую: играющий
-                             трек может не входить в DisplayedTracks (после Play-альбома), тогда TwoWay
-                             SelectedItem-биндинг ListBox-а вкладки «Треки» обнулит SelectedTrack, и эта
-                             панель раньше гасла (bug #6 fix). -->
-                        <Border Width="176" Height="176" CornerRadius="16" BorderBrush="{StaticResource PrimaryBrush}" BorderThickness="2" HorizontalAlignment="Center">
-                            <Border.Background>
-                                <ImageBrush ImageSource="{Binding NowPlayingTrack.CoverPath}" Stretch="UniformToFill" />
-                            </Border.Background>
-                            <Border.Effect>
-                                <DropShadowEffect Color="#D4A574" BlurRadius="35" ShadowDepth="0" Opacity="0.22" />
-                            </Border.Effect>
-                        </Border>
-
-                        <TextBlock Text="{Binding NowPlayingTrack.Title, TargetNullValue='Выберите трек'}" Foreground="{StaticResource ForegroundBrush}" FontSize="21" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap" Margin="0,20,0,6" />
-                        <TextBlock Text="{Binding NowPlayingTrack.Artist}" Foreground="{StaticResource MutedForegroundBrush}" FontSize="15" TextAlignment="Center" />
-
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,12">
-                            <Border Background="#1AD4A574" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="12,5">
-                                <TextBlock Text="{Binding NowPlayingTrack.Genre}" Foreground="{StaticResource PrimaryBrush}" />
+                        <TextBlock Text="ВЫБРАННЫЙ ТРЕК" Foreground="{StaticResource MutedForegroundBrush}" FontSize="12" Margin="0,0,0,12"/>
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Border Width="92" Height="92" HorizontalAlignment="Left" VerticalAlignment="Top" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" CornerRadius="6">
+                                <Border.Background><ImageBrush ImageSource="{Binding SelectedTrack.CoverPath}" Stretch="UniformToFill"/></Border.Background>
                             </Border>
-                            <TextBlock Text="{Binding NowPlayingTrack.DurationText}" Foreground="{StaticResource MutedForegroundBrush}" Margin="12,5,0,0" />
-                        </StackPanel>
-
+                            <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                <TextBlock Text="{Binding SelectedTrack.Title, TargetNullValue='Выберите трек'}" Foreground="{StaticResource ForegroundBrush}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding SelectedTrack.Artist}" Foreground="{StaticResource MutedForegroundBrush}" FontSize="14" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                                <TextBlock Text="{Binding SelectedTrack.Genre}" Foreground="{StaticResource PrimaryBrush}" FontSize="13" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                                <TextBlock Text="{Binding SelectedTrack.DurationText}" Foreground="{StaticResource MutedForegroundBrush}" FontSize="12" Margin="0,3,0,0"/>
+                            </StackPanel>
+                        </Grid>
                         <!-- Рейтинг + реакция: видимы только когда выбран трек. -->
                         <StackPanel HorizontalAlignment="Center" Margin="0,0,0,14"
                                     Visibility="{Binding HasSelectedTrack, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -430,31 +422,29 @@
                                 </Style>
                             </StackPanel.Resources>
 
-                            <!-- Один ряд: 5 звёзд + сердечко (лайк) + перечёркнутое сердечко (дизлайк).
-                                 Клик по горящей звезде / активной реакции сбрасывает значение.
-                                 Размер крупный (≥32 px) для удобного попадания мышью / пальцем. -->
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <!-- Рейтинг и реакция помещаются в редактор шириной 360 DIP. -->
+                            <StackPanel x:Name="RatingControls" Orientation="Horizontal" HorizontalAlignment="Center">
                                 <Button Style="{StaticResource GlyphButtonStyle}" Padding="4" Command="{Binding SetRatingCommand}" CommandParameter="1" ToolTip="1 звезда">
-                                    <TextBlock Text="★" FontSize="32"
+                                    <TextBlock Text="★" FontSize="26"
                                                Foreground="{Binding SelectedTrack.Rating, Converter={StaticResource RatingThresholdToBrushConverter}, ConverterParameter=1}" />
                                 </Button>
                                 <Button Style="{StaticResource GlyphButtonStyle}" Padding="4" Command="{Binding SetRatingCommand}" CommandParameter="2" ToolTip="2 звезды">
-                                    <TextBlock Text="★" FontSize="32"
+                                    <TextBlock Text="★" FontSize="26"
                                                Foreground="{Binding SelectedTrack.Rating, Converter={StaticResource RatingThresholdToBrushConverter}, ConverterParameter=2}" />
                                 </Button>
                                 <Button Style="{StaticResource GlyphButtonStyle}" Padding="4" Command="{Binding SetRatingCommand}" CommandParameter="3" ToolTip="3 звезды">
-                                    <TextBlock Text="★" FontSize="32"
+                                    <TextBlock Text="★" FontSize="26"
                                                Foreground="{Binding SelectedTrack.Rating, Converter={StaticResource RatingThresholdToBrushConverter}, ConverterParameter=3}" />
                                 </Button>
                                 <Button Style="{StaticResource GlyphButtonStyle}" Padding="4" Command="{Binding SetRatingCommand}" CommandParameter="4" ToolTip="4 звезды">
-                                    <TextBlock Text="★" FontSize="32"
+                                    <TextBlock Text="★" FontSize="26"
                                                Foreground="{Binding SelectedTrack.Rating, Converter={StaticResource RatingThresholdToBrushConverter}, ConverterParameter=4}" />
                                 </Button>
                                 <Button Style="{StaticResource GlyphButtonStyle}" Padding="4" Command="{Binding SetRatingCommand}" CommandParameter="5" ToolTip="5 звёзд">
-                                    <TextBlock Text="★" FontSize="32"
+                                    <TextBlock Text="★" FontSize="26"
                                                Foreground="{Binding SelectedTrack.Rating, Converter={StaticResource RatingThresholdToBrushConverter}, ConverterParameter=5}" />
                                 </Button>
-                                <!-- Лайк: сердечко краснеет при активации. -->
+                            <!-- Лайк: сердечко краснеет при активации. -->
                                 <Button Style="{StaticResource GlyphButtonStyle}" Padding="4" Command="{Binding SetReactionCommand}" CommandParameter="Liked" ToolTip="Лайк" Margin="16,0,0,0">
                                     <TextBlock Text="♥" FontSize="32"
                                                Foreground="{Binding SelectedTrack.Reaction, Converter={StaticResource LikeReactionToBrushConverter}, ConverterParameter=Liked}" />
@@ -477,7 +467,7 @@
                         </StackPanel>
 
                         <!-- Разделитель между рейтингом/реакциями и секцией тегов. -->
-                        <Border Height="1" Background="#D4A57420" Margin="0,12,0,12"
+                        <Border Height="1" Background="#D4A57420" Margin="0,6,0,8"
                                 Visibility="{Binding HasSelectedTrack, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
                         <!-- Секция «Теги»: чипы привязанных к выбранному треку + кнопка «+ тег». -->
@@ -558,121 +548,59 @@
                             <TextBlock Text="{Binding OtherPlayingText}" Foreground="{StaticResource PrimaryBrush}" FontSize="13" TextTrimming="CharacterEllipsis" />
                         </Border>
 
-                        <Grid Margin="0,0,0,12"
-                              Visibility="{Binding IsSelectedPlaying, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="42" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="42" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{Binding CurrentPositionText}" Foreground="{StaticResource MutedForegroundBrush}" VerticalAlignment="Center" />
-                            <Slider x:Name="SeekSlider"
-                                    Grid.Column="1"
-                                    Style="{StaticResource SeekSliderStyle}"
-                                    Minimum="0"
-                                    Maximum="{Binding ProgressMaximum}"
-                                    Value="{Binding ProgressValue, Mode=OneWay}"
-                                    IsMoveToPointEnabled="True"
-                                    IsEnabled="{Binding PlayingTrack, Converter={StaticResource NullToBooleanConverter}}"
-                                    Thumb.DragStarted="OnSeekDragStarted"
-                                    PreviewMouseUp="OnSeekPreviewMouseUp"
-                                    Margin="8,0" />
-                            <TextBlock Grid.Column="2" Text="{Binding CurrentDurationText}" Foreground="{StaticResource MutedForegroundBrush}" TextAlignment="Right" VerticalAlignment="Center" />
-                        </Grid>
-
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12">
-                            <Button Command="{Binding PreviousTrackCommand}" Style="{StaticResource IconButtonStyle}" ToolTip="Предыдущий трек">
-                                <Path Data="{StaticResource IconPrevGeometry}" Fill="{StaticResource PrimaryBrush}" Width="18" Height="18" Stretch="Uniform" />
-                            </Button>
-                            <Button Command="{Binding SkipBackwardCommand}" Style="{StaticResource IconButtonStyle}" ToolTip="Назад на 10 секунд">
-                                <Path Data="{StaticResource IconSkipBack10Geometry}" Fill="{StaticResource PrimaryBrush}" Width="18" Height="18" Stretch="Uniform" />
-                            </Button>
-                            <Button Command="{Binding PlayPauseCommand}" Style="{StaticResource PrimaryIconButtonStyle}" ToolTip="Воспроизвести / пауза">
-                                <Path Style="{StaticResource PlayPauseIconStyle}" Fill="{StaticResource BackgroundBrush}" Width="22" Height="22" Stretch="Uniform" />
-                            </Button>
-                            <Button Command="{Binding SkipForwardCommand}" Style="{StaticResource IconButtonStyle}" ToolTip="Вперёд на 10 секунд">
-                                <Path Data="{StaticResource IconSkipForward10Geometry}" Fill="{StaticResource PrimaryBrush}" Width="18" Height="18" Stretch="Uniform" />
-                            </Button>
-                            <Button Command="{Binding NextTrackCommand}" Style="{StaticResource IconButtonStyle}" ToolTip="Следующий трек">
-                                <Path Data="{StaticResource IconNextGeometry}" Fill="{StaticResource PrimaryBrush}" Width="18" Height="18" Stretch="Uniform" />
-                            </Button>
-                        </StackPanel>
-
-                        <Grid Margin="0,0,0,14">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="48" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Path Grid.Column="0" Data="{StaticResource IconVolumeGeometry}" Fill="{StaticResource MutedForegroundBrush}" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,10,0" />
-                            <Slider x:Name="VolumeSlider"
-                                    Grid.Column="1"
-                                    Style="{StaticResource VolumeSliderStyle}"
-                                    Minimum="0"
-                                    Maximum="1"
-                                    Value="{Binding Volume, Mode=TwoWay}"
-                                    IsMoveToPointEnabled="True"
-                                    VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="2" Text="{Binding Volume, StringFormat={}{0:P0}}" Foreground="{StaticResource MutedForegroundBrush}" TextAlignment="Right" VerticalAlignment="Center" Margin="10,0,0,0" />
-                            <Button Grid.Column="3" Command="{Binding ToggleMuteCommand}" Style="{StaticResource IconButtonStyle}" ToolTip="Без звука" Margin="8,0,0,0">
-                                <Path Style="{StaticResource MuteIconStyle}" Fill="{StaticResource PrimaryBrush}" Width="18" Height="18" Stretch="Uniform" />
-                            </Button>
-                            <Button Grid.Column="4"
-                                    Command="{Binding CycleRepeatModeCommand}"
-                                    Style="{StaticResource IconButtonStyle}"
-                                    ToolTip="Режим повтора"
-                                    Width="44"
-                                    Height="44"
-                                    Padding="4"
-                                    Margin="4,0,0,0">
-                                <Grid Width="30" Height="34">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="18" />
-                                        <RowDefinition Height="16" />
-                                    </Grid.RowDefinitions>
-                                    <Path Grid.Row="0"
-                                          Data="{StaticResource IconRepeatGeometry}"
-                                          Style="{StaticResource RepeatIconStyle}"
-                                          Width="16"
-                                          Height="16"
-                                          Stretch="Uniform"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Bottom" />
-                                    <TextBlock Grid.Row="1"
-                                               Style="{StaticResource RepeatLabelStyle}"
-                                               FontSize="8"
-                                               FontWeight="Bold"
-                                               MinWidth="30"
-                                               TextAlignment="Center"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Top"
-                                               Margin="0,2,0,0" />
-                                </Grid>
-                            </Button>
-                        </Grid>
-
-                        <Button Content="Сохранить" Command="{Binding SaveTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,0,10" />
-                        <Button Content="Удалить трек" Command="{Binding DeleteTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" Foreground="{StaticResource ErrorBrush}" Visibility="{Binding CanDeleteSelected, Converter={StaticResource BooleanToVisibilityConverter}}" />
-
-                        <TextBlock Text="{Binding StatusMessage}"
-                                   Foreground="{Binding StatusKind, Converter={StaticResource StatusKindToBrushConverter}}"
-                                   TextWrapping="Wrap"
-                                   TextAlignment="Center"
-                                   Margin="0,18,0,0" />
                     </StackPanel>
                 </ScrollViewer>
+                <StackPanel Grid.Row="1" Margin="0,12,0,0">
+                    <Button x:Name="PlaySelectedButton" Padding="12,4" Content="Воспроизвести выбранный" Command="{Binding PlayTrackCommand}" CommandParameter="{Binding SelectedTrack}" Style="{StaticResource SecondaryButtonStyle}" Height="36" Margin="0,0,0,8"/>
+                    <UniformGrid Columns="2">
+                        <Button Content="Сохранить копию…" Command="{Binding SaveTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" Height="36" Padding="8,4" Margin="0,0,4,0"/>
+                        <Button Content="Удалить трек" Command="{Binding DeleteTrackCommand}" Style="{StaticResource SecondaryButtonStyle}" Height="36" Padding="8,4" Margin="4,0,0,0" Foreground="{StaticResource ErrorBrush}" IsEnabled="{Binding CanDeleteSelected}"/>
+                    </UniformGrid>
+                </StackPanel>
+                </Grid>
             </Border>
 
-            <Border Grid.Column="2" Background="#4D16161F" Padding="24">
+            <Border Grid.Column="2" Background="#4D16161F" Padding="16">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="История прослушиваний" Foreground="{StaticResource ForegroundBrush}" FontWeight="SemiBold" FontSize="18" Margin="0,0,0,18" />
+                    <TextBlock DockPanel.Dock="Top" Text="История" ToolTip="История прослушиваний" Foreground="{StaticResource ForegroundBrush}" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,18" />
                     <ListBox ItemsSource="{Binding PlaybackHistory}"
                              ItemTemplate="{StaticResource HistoryItemTemplate}"
                              Style="{StaticResource PanelListBoxStyle}" />
                 </DockPanel>
             </Border>
         </Grid>
+        <!-- Транспорт закреплён независимо от прокрутки и выделения в библиотеке. -->
+        <Border x:Name="PlayerTransport" Grid.Row="3" Background="{StaticResource CardBrush}" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="0,1,0,0" Padding="20,8,20,10">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="230"/><ColumnDefinition Width="*"/><ColumnDefinition Width="230"/></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                    <TextBlock Text="{Binding NowPlayingTrack.Title, TargetNullValue='Выберите музыку'}" Foreground="{StaticResource ForegroundBrush}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding NowPlayingTrack.Artist}" Foreground="{StaticResource MutedForegroundBrush}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <Grid Grid.Column="1" Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="*"/><ColumnDefinition Width="48"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding CurrentPositionText}" Foreground="{StaticResource MutedForegroundBrush}" VerticalAlignment="Center"/>
+                    <Slider x:Name="SeekSlider" Grid.Column="1" Style="{StaticResource SeekSliderStyle}" Minimum="0" Maximum="{Binding ProgressMaximum}" Value="{Binding ProgressValue, Mode=OneWay}" IsMoveToPointEnabled="True" IsEnabled="{Binding PlayingTrack, Converter={StaticResource NullToBooleanConverter}}" Thumb.DragStarted="OnSeekDragStarted" Thumb.DragCompleted="OnSeekDragCompleted" PreviewMouseUp="OnSeekPreviewMouseUp" PreviewKeyUp="OnSeekKeyUp" AutomationProperties.Name="Позиция воспроизведения"/>
+                    <TextBlock Grid.Column="2" Text="{Binding CurrentDurationText}" Foreground="{StaticResource MutedForegroundBrush}" TextAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button Command="{Binding PreviousTrackCommand}" Style="{StaticResource IconButtonStyle}" ToolTip="Предыдущий (Ctrl+←)" AutomationProperties.Name="Предыдущий трек"><Path Data="{StaticResource IconPrevGeometry}" Fill="{StaticResource PrimaryBrush}" Width="18" Height="18" Stretch="Uniform"/></Button>
+                    <Button Command="{Binding SkipBackwardCommand}" Style="{StaticResource IconButtonStyle}" ToolTip="Назад на 10 секунд" AutomationProperties.Name="Назад на 10 секунд"><Path Data="{StaticResource IconSkipBack10Geometry}" Fill="{StaticResource PrimaryBrush}" Width="18" Height="18" Stretch="Uniform"/></Button>
+                    <Button x:Name="TransportPlayButton" Command="{Binding TogglePlaybackCommand}" Style="{StaticResource PrimaryIconButtonStyle}" Width="46" Height="46" ToolTip="Воспроизвести / пауза (Space)" AutomationProperties.Name="Воспроизвести или приостановить"><Path Style="{StaticResource PlayPauseIconStyle}" Fill="{StaticResource BackgroundBrush}" Width="20" Height="20" Stretch="Uniform"/></Button>
+                    <Button Command="{Binding SkipForwardCommand}" Style="{StaticResource IconButtonStyle}" ToolTip="Вперёд на 10 секунд" AutomationProperties.Name="Вперёд на 10 секунд"><Path Data="{StaticResource IconSkipForward10Geometry}" Fill="{StaticResource PrimaryBrush}" Width="18" Height="18" Stretch="Uniform"/></Button>
+                    <Button Command="{Binding NextTrackCommand}" Style="{StaticResource IconButtonStyle}" ToolTip="Следующий (Ctrl+→)" AutomationProperties.Name="Следующий трек"><Path Data="{StaticResource IconNextGeometry}" Fill="{StaticResource PrimaryBrush}" Width="18" Height="18" Stretch="Uniform"/></Button>
+                    <Button Command="{Binding StopCommand}" Style="{StaticResource IconButtonStyle}" ToolTip="Остановить" AutomationProperties.Name="Остановить"><Rectangle Width="12" Height="12" Fill="{StaticResource PrimaryBrush}"/></Button>
+                </StackPanel>
+                <Grid Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="40"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Button Command="{Binding ToggleMuteCommand}" Style="{StaticResource IconButtonStyle}" ToolTip="Без звука (Ctrl+M)" AutomationProperties.Name="Без звука"><Path Style="{StaticResource MuteIconStyle}" Width="18" Height="18" Stretch="Uniform" Fill="{StaticResource PrimaryBrush}"/></Button>
+                    <Slider Grid.Column="1" Minimum="0" Maximum="1" Value="{Binding Volume, Mode=TwoWay}" VerticalAlignment="Center" Style="{StaticResource VolumeSliderStyle}" AutomationProperties.Name="Громкость"/>
+                    <TextBlock Grid.Column="2" Text="{Binding Volume, StringFormat={}{0:P0}}" Foreground="{StaticResource MutedForegroundBrush}" VerticalAlignment="Center" FontSize="11" TextAlignment="Right"/>
+                    <Button Grid.Column="3" Command="{Binding CycleRepeatModeCommand}" Style="{StaticResource IconButtonStyle}" ToolTip="Режим повтора (Ctrl+R)" AutomationProperties.Name="Режим повтора"><StackPanel><Path Data="{StaticResource IconRepeatGeometry}" Style="{StaticResource RepeatIconStyle}" Width="16" Height="16" Stretch="Uniform"/><TextBlock Style="{StaticResource RepeatLabelStyle}" FontSize="9" TextAlignment="Center"/></StackPanel></Button>
+                </Grid>
+                <TextBlock Grid.Row="2" Grid.ColumnSpan="3" Text="{Binding StatusMessage}" Foreground="{Binding StatusKind, Converter={StaticResource StatusKindToBrushConverter}}" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusMessage}" FontSize="11" Margin="0,5,0,0"/>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

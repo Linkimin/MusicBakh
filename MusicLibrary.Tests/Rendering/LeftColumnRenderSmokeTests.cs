@@ -70,7 +70,91 @@ public sealed class LeftColumnRenderSmokeTests
 
             // Sanity: прошли ровно через все 7 вариантов дискриминированного union'а.
             Assert.IsType<LeftColumnState.PlaylistDetail>(vm.CurrentLeftColumn);
+            RenderFullWindow(vm);
         });
+    }
+
+    private static void RenderFullWindow(MainViewModel vm)
+    {
+        vm.SwitchViewCommand.Execute(MainViewMode.Tracks);
+        vm.PlayTrackCommand.Execute(vm.DisplayedTracks[0]);
+        vm.PlaybackHistory.Add(new PlaybackEntry { Track = vm.DisplayedTracks[0], PlayedAt = DateTime.UtcNow });
+        var window = new MusicLibrary.MainWindow(vm, new FakePlayerSettingsRepository())
+            { ShowInTaskbar = false, ShowActivated = false };
+        try
+        {
+            window.Show();
+            foreach (var size in new[] { new Size(980, 640), new Size(1180, 760) })
+            {
+                window.Width = size.Width;
+                window.Height = size.Height;
+                window.UpdateLayout();
+                var button = (FrameworkElement)window.FindName("TransportPlayButton");
+                var point = button.TranslatePoint(new Point(), window);
+
+                string? output = Environment.GetEnvironmentVariable("MUSICBAKH_RENDER_OUTPUT");
+                if (!string.IsNullOrEmpty(output))
+                {
+                    Directory.CreateDirectory(output);
+                    var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(
+                        (int)window.ActualWidth, (int)window.ActualHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+                    bitmap.Render(window);
+                    var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                    encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+                    using var file = File.Create(Path.Combine(output, $"main-{size.Width}.png"));
+                    encoder.Save(file);
+                }
+                Assert.True(point.Y > 0 && point.Y + button.ActualHeight <= window.ActualHeight,
+                    $"Транспорт: Y={point.Y}, H={button.ActualHeight}, WindowH={window.ActualHeight}.");
+                Assert.True(button.ActualWidth >= 40 && button.ActualHeight >= 40);
+                var tabs = (FrameworkElement)window.FindName("LibraryNavigation");
+                var header = (FrameworkElement)window.FindName("LibraryHeader");
+                Assert.True(tabs.ActualHeight >= 30);
+                Assert.True(tabs.TranslatePoint(new Point(), header).Y + tabs.ActualHeight <= header.ActualHeight);
+                var rating = (FrameworkElement)window.FindName("RatingControls");
+                var editor = (FrameworkElement)window.FindName("TrackEditor");
+                Assert.True(rating.TranslatePoint(new Point(), editor).X >= 0);
+                Assert.True(rating.TranslatePoint(new Point(), editor).X + rating.ActualWidth <= editor.ActualWidth);
+                Assert.True(editor.ActualWidth >= 350);
+                var selectedPlay = (Button)window.FindName("PlaySelectedButton");
+                Assert.True(selectedPlay.ActualHeight >= 36);
+                Assert.True(Descendants(selectedPlay).OfType<ContentPresenter>().First().ActualHeight >= selectedPlay.FontSize * 1.2,
+                    "Button padding must leave enough height for its label.");
+                Assert.True(selectedPlay.TranslatePoint(new Point(), window).Y + selectedPlay.ActualHeight <= point.Y);
+            }
+            // Проверяем и историю: её double-click должен воспроизводить трек.
+            var historyRow = Descendants(window).OfType<FrameworkElement>().First(e => e.DataContext is PlaybackEntry && e.InputBindings.Count > 0);
+            var historyClick = historyRow.InputBindings.OfType<System.Windows.Input.MouseBinding>().Single();
+            Assert.NotNull(historyClick.Command);
+            vm.StopCommand.Execute(null);
+            historyClick.Command.Execute(historyClick.CommandParameter);
+            Assert.True(vm.IsPlaying);
+            vm.MinRating = 5;
+            window.UpdateLayout();
+            Assert.Empty(vm.DisplayedTracks);
+            Assert.Contains(Descendants(window).OfType<TextBlock>(), t => t.Text == "Треки не найдены" && t.IsVisible);
+            vm.ClearFiltersCommand.Execute(null);
+            window.UpdateLayout();
+            Assert.NotEmpty(vm.DisplayedTracks);
+            var longTrack = new Track { Id = 999, Title = new string('Ж', 180), Artist = new string('И', 120), Genre = new string('Р', 80), FilePath = "long.mp3" };
+            vm.AddTrack(longTrack);
+            vm.SelectedTrack = longTrack;
+            window.Width = 980;
+            window.Height = 640;
+            window.UpdateLayout();
+            var compactPlay = (Button)window.FindName("PlaySelectedButton");
+            Assert.True(compactPlay.TranslatePoint(new Point(), window).Y + compactPlay.ActualHeight < window.ActualHeight);
+            var scaled = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(window.ActualWidth * 1.5), (int)(window.ActualHeight * 1.5), 144, 144, System.Windows.Media.PixelFormats.Pbgra32);
+            scaled.Render(window);
+            if (Environment.GetEnvironmentVariable("MUSICBAKH_RENDER_OUTPUT") is { Length: > 0 } outputPath)
+            {
+                var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(scaled));
+                using var file = File.Create(Path.Combine(outputPath, "long-text-150-percent.png"));
+                encoder.Save(file);
+            }
+        }
+        finally { window.Close(); }
     }
 
     /// <summary>
@@ -101,10 +185,40 @@ public sealed class LeftColumnRenderSmokeTests
         {
             window.Show(); // форсит полный цикл шаблонизации/биндинга
             host.UpdateLayout();
+            Assert.True(host.ActualWidth > 0 && host.ActualHeight > 0);
+            Assert.True(System.Windows.Media.VisualTreeHelper.GetChildrenCount(host) > 0);
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+            int playbackBindings = 0;
+            foreach (var element in Descendants(host).OfType<FrameworkElement>())
+            {
+                foreach (var binding in element.InputBindings.OfType<System.Windows.Input.MouseBinding>())
+                {
+                    if (binding.MouseAction != System.Windows.Input.MouseAction.LeftDoubleClick || element.DataContext is not Track track) continue;
+                    playbackBindings++;
+                    Assert.NotNull(binding.Command);
+                    Assert.True(binding.Command.CanExecute(binding.CommandParameter));
+                    vm.StopCommand.Execute(null);
+                    binding.Command.Execute(binding.CommandParameter);
+                    Assert.Equal(track.Id, vm.PlayingTrack?.Id);
+                    Assert.True(vm.IsPlaying);
+                }
+            }
+            if (vm.CurrentLeftColumn is LeftColumnState.TracksRoot or LeftColumnState.AlbumDetail or LeftColumnState.PlaylistDetail)
+                Assert.True(playbackBindings > 0, "Track rows must expose working double-click bindings.");
         }
         finally
         {
             window.Close();
+        }
+    }
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    {
+        for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+            yield return child;
+            foreach (var descendant in Descendants(child)) yield return descendant;
         }
     }
 
@@ -137,8 +251,8 @@ public sealed class LeftColumnRenderSmokeTests
     /// MergedDictionaries по порядку, ЗАТЕМ прямые дочерние ресурсы — конвертеры) в
     /// Application.Current.Resources ТОЧНО так же, как при обычном запуске.
     ///
-    /// Мы не вызываем Run()/OnStartup — значит Host/DI/MainWindow из App.xaml.cs не создаются,
-    /// только резолвится дерево ресурсов.
+    /// startServices:false явно отключает Host/DI/storage: WPF ставит OnStartup в очередь
+    /// даже без Run(), поэтому одного отсутствия Run() для изоляции недостаточно.
     ///
     /// Почему не голый Application.LoadComponent(new Application(), uri) с URI, собранным
     /// руками: он резолвится через статическое Application.ResourceAssembly, которое WPF
@@ -156,7 +270,8 @@ public sealed class LeftColumnRenderSmokeTests
             return; // уже загружено (несколько тестов в одном процессе/потоке).
         }
 
-        var app = new MusicLibrary.App();
+        var app = new MusicLibrary.App(startServices: false);
+        app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
         app.InitializeComponent();
     }
 
@@ -194,8 +309,8 @@ public sealed class LeftColumnRenderSmokeTests
     {
         var tracks = new[]
         {
-            new Track { Id = 1, Title = "Track1", Artist = "Artist1", Album = "Album1", TrackNumber = 1, FilePath = "1.mp3" },
-            new Track { Id = 2, Title = "Track2", Artist = "Artist1", Album = "Album1", TrackNumber = 2, FilePath = "2.mp3" },
+            new Track { Id = 1, Title = "Track1", Artist = "Artist1", Album = "Album1", TrackNumber = 1, Genre = "Рок", Duration = TimeSpan.FromSeconds(204), CoverPath = Path.Combine(AppContext.BaseDirectory, "Covers", "ya-svoboden.jpg"), FilePath = "1.mp3" },
+            new Track { Id = 2, Title = "Track2", Artist = "Artist1", Album = "Album1", TrackNumber = 2, Genre = "Инди", Duration = TimeSpan.FromSeconds(215), CoverPath = Path.Combine(AppContext.BaseDirectory, "Covers", "hayloft-ii.jpg"), FilePath = "2.mp3" },
             new Track { Id = 3, Title = "Track3", Artist = "Artist2", Album = "Album2", TrackNumber = 1, FilePath = "3.mp3" },
         };
 
@@ -257,7 +372,8 @@ public sealed class LeftColumnRenderSmokeTests
             thread.SetApartmentState(ApartmentState.STA);
             thread.IsBackground = true;
             thread.Start();
-            thread.Join();
+            if (!thread.Join(TimeSpan.FromSeconds(30)))
+                throw new TimeoutException("WPF render test не завершился за 30 секунд.");
 
             if (captured is not null)
             {
@@ -294,9 +410,9 @@ public sealed class LeftColumnRenderSmokeTests
 
     private sealed class FakeAudioPlayerService : IAudioPlayerService
     {
-        public event EventHandler<string>? MediaOpened;
-        public event EventHandler? MediaEnded;
-        public event EventHandler<string>? MediaFailed;
+        public event EventHandler<string>? MediaOpened { add { } remove { } }
+        public event EventHandler? MediaEnded { add { } remove { } }
+        public event EventHandler<string>? MediaFailed { add { } remove { } }
 
         public bool IsPlaying => false;
         public TimeSpan Position { get; set; }
