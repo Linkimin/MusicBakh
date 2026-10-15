@@ -126,6 +126,18 @@ public sealed class SqliteTagRepository : ITagRepository
             INSERT OR IGNORE INTO TrackTags (TrackId, TagId) VALUES ({trackId}, {tagId})");
     }
 
+    public IReadOnlyDictionary<int, IReadOnlyList<Tag>> GetTagsByTrack()
+    {
+        using var ctx = _contextFactory();
+        return ctx.TrackTags.AsNoTracking()
+            .OrderBy(tt => tt.Tag.Name)
+            .Select(tt => new { tt.TrackId, tt.Tag.Id, tt.Tag.Name, tt.Tag.Color })
+            .ToList()
+            .GroupBy(tt => tt.TrackId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<Tag>)g.Select(t =>
+                new Tag { Id = t.Id, Name = t.Name, Color = t.Color }).ToList());
+    }
+
     public void DetachTag(int trackId, int tagId)
     {
         using var ctx = _contextFactory();

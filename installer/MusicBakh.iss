@@ -2,12 +2,12 @@
 ; Версия передаётся параметром: ISCC /DMyAppVersion=1.0.0 MusicBakh.iss
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #error MyAppVersion must be passed by scripts/build-release.ps1
 #endif
 #define MyAppName "MusicBakh"
 #define MyAppPublisher "Matvey Bakhmatov"
 #define MyAppExeName "MusicBakh.exe"
-#define MyAppURL "https://github.com/Matvey-Bakhmatov/MusicBakh"
+#define MyAppURL "https://github.com/Linkimin/MusicBakh"
 
 [Setup]
 ; Уникальный AppId — менять нельзя, иначе обновление поверх установится как новое приложение.

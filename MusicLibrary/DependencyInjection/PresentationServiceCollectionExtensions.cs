@@ -35,6 +35,11 @@ public static class PresentationServiceCollectionExtensions
         services.AddTransient<StatsViewModel>();
         services.AddTransient<TagsViewModel>();
 
+        // PlaylistsViewModel — singleton: состояние плейлистов должно жить всю сессию
+        // приложения, а не пересоздаваться при каждом новом MainWindow/MainViewModel
+        // (MainViewModel сам transient, но плейлисты — общий ресурс, как и IPlaylistRepository).
+        services.AddSingleton<PlaylistsViewModel>();
+
         // MEDI не умеет автоматически генерировать Func<T> для DI — регистрируем явно.
         // Каждый вызов factory резолвит свежий transient ViewModel из корня
         // провайдера, поэтому окно всегда видит актуальные данные.

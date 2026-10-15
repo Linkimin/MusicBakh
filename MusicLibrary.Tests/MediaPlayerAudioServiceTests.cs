@@ -6,6 +6,30 @@ namespace MusicLibrary.Tests;
 public sealed class MediaPlayerAudioServiceTests
 {
     [Fact]
+    public void InitialVolume_MatchesDefaultSettings()
+    {
+        using var service = new MediaPlayerAudioService();
+        Assert.Equal(MusicBakh.Core.Domain.PlayerSettings.Default.Volume, service.Volume);
+    }
+
+    [Fact]
+    public void InvalidVolume_DoesNotReachNativePlayer()
+    {
+        using var service = new MediaPlayerAudioService();
+        service.Volume = 0.4;
+        service.Volume = double.NaN;
+        Assert.Equal(0.4, service.Volume);
+    }
+
+    [Fact]
+    public void PlayWithoutOpen_DoesNotReportPlaying()
+    {
+        using var service = new MediaPlayerAudioService();
+        Assert.False(service.Play().IsSuccess);
+        Assert.False(service.IsPlaying);
+    }
+
+    [Fact]
     public void Open_PreservesVolumeAndMuteState()
     {
         using var service = new MediaPlayerAudioService();

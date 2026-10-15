@@ -5,6 +5,12 @@ namespace MusicLibrary.Tests.Search;
 
 public sealed class FtsQueryBuilderTests
 {
+    [Fact]
+    public void Build_BoundsVeryLongInput()
+    {
+        Assert.Null(FtsQueryBuilder.Build(new string('a', 100_000)));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

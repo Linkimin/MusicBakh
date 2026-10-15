@@ -1,0 +1,290 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:converters="clr-namespace:MusicLibrary.Converters"
+                    xmlns:behaviors="clr-namespace:MusicLibrary.Behaviors">
+
+    <!-- Конвертеры объявлены здесь локально: {StaticResource} внутри DataTemplate этого
+         merged-словаря резолвится при загрузке шаблона и НЕ видит ключей, объявленных прямыми
+         детьми Application.Resources после блока MergedDictionaries (тот же приём, что в
+         TrackTemplates.xaml / AlbumsArtistsTemplates.xaml). Без этого переключение на вкладку
+         «Плейлисты» падает с XamlParseException «ресурс ... не найден». -->
+    <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter" />
+    <!-- Локально (MultiBinding.Converter резолвится при загрузке шаблона): подсветка
+         играющего трека в детали плейлиста сравнивает трек строки с PlayingTrack. -->
+    <converters:TrackIdentityMatchConverter x:Key="TrackIdentityMatchConverter" />
+    <!-- Номер трека в списке плейлиста: 0-based AlternationIndex → 1-based номер строки. -->
+    <converters:IndexToTrackNumberConverter x:Key="IndexToTrackNumberConverter" />
+    <!-- BooleanToVisibilityConverter/InverseBooleanToVisibilityConverter уже объявлены в
+         App.xaml, но ПОСЛЕ MergedDictionaries — тот же D-LESSON, что и выше: локальная копия
+         обязательна для показ/скрытие кнопки «+ Новый плейлист» / поля инлайн-ввода. -->
+    <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter" />
+    <!-- Сравнивает Id строки плейлиста с Playlists.EditingPlaylistId (минимальный инлайн-edit,
+         Task 7): true → показать TextBox переименования, false → показать TextBlock с именем. -->
+    <converters:IdEqualsConverter x:Key="IdEqualsConverter" />
+
+    <!-- Контекст-меню строки плейлиста (Task 7): «Переименовать» переводит строку в инлайн-edit
+         (Playlists.StartRenameCommand), «Удалить» — DeletePlaylistCommand. DataContext меню —
+         сам Playlist (обычный DataContext, НЕ PlacementTarget.Tag: команды уже на под-VM,
+         которую видно через Window точно так же). -->
+    <ContextMenu x:Key="PlaylistRowContextMenu" x:Shared="False">
+        <MenuItem Header="Переименовать"
+                  Command="{Binding PlacementTarget.Tag.Playlists.StartRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                  CommandParameter="{Binding}" />
+        <MenuItem Header="Удалить"
+                  Command="{Binding PlacementTarget.Tag.Playlists.DeletePlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                  CommandParameter="{Binding}" />
+    </ContextMenu>
+
+    <!-- Контекст-меню трек-строки ВНУТРИ детали плейлиста (Task 7): «Добавить в плейлист ▸» +
+         «Новый плейлист…» (как и везде) + «Убрать из плейлиста» — специфично для этого места.
+         CommandParameter «Убрать» — позиция строки (0-based), а не Id трека: RemovePlaylistTrackCommand
+         удаляет ПО ПОЗИЦИИ (см. MainViewModel), чтобы дубликаты одного трека в плейлисте не путались.
+         Источник позиции — TrackContextMenuBehavior.ResolvedPosition, а НЕ голый
+         "PlacementTarget.(ItemsControl.AlternationIndex)": AlternationIndex — read-only attached
+         свойство БЕЗ Inherits, выставляется ItemsControl только на ListBoxItem-контейнере, а
+         PlacementTarget — это внутренний Grid строки, не сам контейнер. Прямое чтение с
+         PlacementTarget вернуло бы дефолт 0 для каждой строки. TrackContextMenuBehavior поднимается
+         до ListBoxItem и кладёт реальный AlternationIndex в ResolvedPosition НА САМОМ Grid
+         (см. Behaviors/TrackContextMenuBehavior.cs) — оттуда PlacementTarget его уже читает напрямую. -->
+    <ContextMenu x:Key="PlaylistDetailTrackRowContextMenu" x:Shared="False">
+        <MenuItem Header="Добавить в плейлист"
+                  ItemsSource="{Binding PlacementTarget.Tag.Playlists.Playlists, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.ItemContainerStyle>
+                <Style TargetType="MenuItem">
+                    <Setter Property="Header" Value="{Binding Name}" />
+                    <Setter Property="Command" Value="{Binding PlacementTarget.Tag.AddContextToPlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <Setter Property="CommandParameter" Value="{Binding}" />
+                </Style>
+            </MenuItem.ItemContainerStyle>
+        </MenuItem>
+        <MenuItem Header="Новый плейлист…"
+                  Command="{Binding PlacementTarget.Tag.Playlists.StartNewPlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Separator />
+        <MenuItem Header="Убрать из плейлиста"
+                  Command="{Binding PlacementTarget.Tag.RemovePlaylistTrackCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                  CommandParameter="{Binding PlacementTarget.(behaviors:TrackContextMenuBehavior.ResolvedPosition), RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </ContextMenu>
+
+    <!-- ========== PlaylistRow: строка плейлиста в корневом списке ========== -->
+    <!-- DataContext строки — сам Playlist (элемент Playlists.Playlists). OpenPlaylistCommand
+         берём через RelativeSource AncestorType=Window (DataContext окна = MainViewModel),
+         а не через ItemsControl — тот же приём, что и в AlbumTileTemplate/ArtistRowTemplate.
+         Tag на Border нужен ТОЛЬКО для ContextMenu.PlacementTarget.Tag (Task 7) — сама строка
+         открытие плейлиста и клики берёт через AncestorType=Window, как и раньше. -->
+    <DataTemplate x:Key="PlaylistRowTemplate">
+        <!-- PlaylistDropTarget (Task 8): drop трека(ов) сюда = добавить в этот плейлист
+             (DropTracksOnPlaylistCommand). DragOver-хайлайт через IsDropHighlighted +
+             DragHighlightBrush-триггер ниже (минимальный визуальный фидбек, без adorner-полировки —
+             см. комментарий в DragDropListHelper). -->
+        <Border x:Name="PlaylistRowRoot" Background="#332A2A3F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1"
+                CornerRadius="10" Padding="14,12" Margin="0,0,0,6" Cursor="Hand"
+                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                behaviors:DragDropListHelper.PlaylistDropTarget="True"
+                ContextMenu="{StaticResource PlaylistRowContextMenu}">
+            <Border.InputBindings>
+                <MouseBinding MouseAction="LeftClick"
+                              Command="{Binding DataContext.OpenPlaylistCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                              CommandParameter="{Binding}" />
+            </Border.InputBindings>
+            <Grid>
+                <!-- Обычное отображение имени — видно, пока строка НЕ в режиме переименования. -->
+                <TextBlock Text="{Binding Name}" Foreground="{StaticResource ForegroundBrush}"
+                           FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis">
+                    <TextBlock.Visibility>
+                        <MultiBinding Converter="{StaticResource IdEqualsConverter}" ConverterParameter="Invert">
+                            <Binding Path="Id" />
+                            <Binding Path="DataContext.Playlists.EditingPlaylistId" RelativeSource="{RelativeSource AncestorType=Window}" />
+                        </MultiBinding>
+                    </TextBlock.Visibility>
+                </TextBlock>
+
+                <!-- Инлайн-ввод переименования: тот же MC6024-обход, что и создание плейлиста —
+                     Enter/Esc ловятся в Window_KeyDown по x:Name="PlaylistRenameInput". -->
+                <TextBox x:Name="PlaylistRenameInput"
+                         Style="{StaticResource SearchTextBoxStyle}"
+                         Text="{Binding Name, Mode=OneWay}"
+                         behaviors:FocusOnVisibleBehavior.FocusOnVisible="True">
+                    <TextBox.Visibility>
+                        <MultiBinding Converter="{StaticResource IdEqualsConverter}">
+                            <Binding Path="Id" />
+                            <Binding Path="DataContext.Playlists.EditingPlaylistId" RelativeSource="{RelativeSource AncestorType=Window}" />
+                        </MultiBinding>
+                    </TextBox.Visibility>
+                </TextBox>
+            </Grid>
+        </Border>
+        <DataTemplate.Triggers>
+            <!-- Подсветка во время валидного DragOver (DragDropListHelper.OnPlaylistRowDragOver
+                 выставляет IsDropHighlighted=True/False). -->
+            <Trigger Property="behaviors:DragDropListHelper.IsDropHighlighted" Value="True" SourceName="PlaylistRowRoot">
+                <Setter TargetName="PlaylistRowRoot" Property="Background" Value="#402A2018" />
+                <Setter TargetName="PlaylistRowRoot" Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+                <Setter TargetName="PlaylistRowRoot" Property="BorderThickness" Value="2" />
+            </Trigger>
+        </DataTemplate.Triggers>
+    </DataTemplate>
+
+    <!-- ========== PlaylistsRoot: список плейлистов + инлайн-создание ========== -->
+    <!-- DataContext этого шаблона — LeftColumnState.PlaylistsRoot; сама коллекция и команды
+         живут в MainViewModel.Playlists (под-VM), поэтому всё биндится через Window. -->
+    <DataTemplate x:Key="PlaylistsRootTemplate">
+        <Grid>
+            <DockPanel LastChildFill="True">
+                <!-- Кнопка создания + инлайн-строка ввода имени (видна, пока Playlists.IsCreating=true). -->
+                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+                    <Button Content="+ Новый плейлист"
+                            Command="{Binding DataContext.Playlists.StartNewPlaylistCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                            Style="{StaticResource SecondaryButtonStyle}" HorizontalAlignment="Left" Height="36" Padding="14,0"
+                            Visibility="{Binding DataContext.Playlists.IsCreating, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource InverseBooleanToVisibilityConverter}}" />
+
+                    <!-- Инлайн-ввод имени нового плейлиста: Enter → ConfirmNewPlaylistName,
+                         Esc → отмена. Обработчик — Window_KeyDown в MainWindow.xaml.cs: обычный
+                         KeyDown="..." здесь невозможен (ResourceDictionary без x:Class не может
+                         резолвить обработчики событий — MC6024), поэтому используем то, что
+                         KeyDown — routed-событие и всплывает от TextBox до Window; там уже
+                         различаем источник по x:Name="PlaylistNameInput". -->
+                    <TextBox x:Name="PlaylistNameInput"
+                             Style="{StaticResource SearchTextBoxStyle}"
+                             Tag="Имя плейлиста"
+                             Text="Новый плейлист"
+                             behaviors:FocusOnVisibleBehavior.FocusOnVisible="True"
+                             Visibility="{Binding DataContext.Playlists.IsCreating, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                </StackPanel>
+
+                <Grid>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding DataContext.Playlists.Playlists, RelativeSource={RelativeSource AncestorType=Window}}"
+                                      ItemTemplate="{StaticResource PlaylistRowTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <!-- Empty state: плейлистов ещё нет. -->
+                    <TextBlock Text="Плейлистов пока нет — создайте первый"
+                               Foreground="{StaticResource MutedForegroundBrush}" FontSize="13"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                               TextWrapping="Wrap" MaxWidth="360"
+                               Visibility="{Binding DataContext.Playlists.Playlists.Count, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource CountToVisibilityConverter}, ConverterParameter=Invert}" />
+                </Grid>
+            </DockPanel>
+        </Grid>
+    </DataTemplate>
+
+    <!-- ========== PlaylistDetail (внутри drill-down) ========== -->
+    <!-- DataContext этого шаблона — LeftColumnState.PlaylistDetail (свойство Playlist — PlaylistView). -->
+    <DataTemplate x:Key="PlaylistDetailTemplate">
+        <DockPanel LastChildFill="True">
+            <Button DockPanel.Dock="Top" Content="← Все плейлисты"
+                    Command="{Binding DataContext.BackCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                    Background="Transparent" BorderThickness="0" Foreground="{StaticResource PrimaryBrush}"
+                    HorizontalAlignment="Left" Padding="8,4" Margin="0,0,0,8" Cursor="Hand" />
+
+            <!-- Header: имя плейлиста + кол-во треков/суммарная длительность + Play/Shuffle. -->
+            <Border DockPanel.Dock="Top" Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="{Binding Playlist.Playlist.Name}" Foreground="{StaticResource ForegroundBrush}"
+                               FontWeight="SemiBold" FontSize="18" />
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                        <TextBlock Foreground="{StaticResource MutedForegroundBrush}" FontSize="11">
+                            <Run Text="{Binding Playlist.Tracks.Count, Mode=OneWay}" />
+                            <Run Text=" треков" />
+                        </TextBlock>
+                        <TextBlock Text=" · " Foreground="{StaticResource MutedForegroundBrush}" FontSize="11" />
+                        <TextBlock Text="{Binding Playlist.TotalDuration, StringFormat={}{0:hh\\:mm\\:ss}}"
+                                   Foreground="{StaticResource MutedForegroundBrush}" FontSize="11" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button Content="▶ Воспроизвести" Style="{StaticResource PrimaryButtonStyle}" Height="40" Padding="16,0" FontSize="13"
+                                Command="{Binding DataContext.PlayPlaylistCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding Playlist}" />
+                        <Button Content="🔀 Перемешать" Style="{StaticResource SecondaryButtonStyle}" Height="40" Padding="16,0" FontSize="13" Margin="8,0,0,0"
+                                Command="{Binding DataContext.ShufflePlaylistCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding Playlist}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Tracks list (+ empty-state). AlternationCount обязателен — Task 7 удаляет трек
+                 из плейлиста по AlternationIndex (позиции в списке), без него все строки
+                 получили бы AlternationIndex=0 (дефолт AlternationCount=0). Та же позиция
+                 переиспользуется для reorder (Task 8) — см. DragDropListHelper.IsReorderSource.
+                 ReorderTarget на самом ListBox: Drop обрабатывает и add (drag извне — из вкладки
+                 «Треки»/альбома/исполнителя), и reorder (drag начат внутри этого же списка) —
+                 см. DragDropListHelper.OnReorderDrop. SelectionMode=Extended — мульти-выбор для
+                 батча id, Tag — доступ к MainViewModel из обработчика Drop на самом ListBox. -->
+            <Grid>
+                <ListBox ItemsSource="{Binding Playlist.Tracks}"
+                         AlternationCount="{Binding Playlist.Tracks.Count}"
+                         SelectionMode="Extended"
+                         BorderThickness="2"
+                         Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                         behaviors:DragDropListHelper.ReorderTarget="True"
+                         ItemContainerStyle="{StaticResource TrackListBoxItemStyle}">
+                    <ListBox.Style>
+                        <Style TargetType="ListBox" BasedOn="{StaticResource PanelListBoxStyle}">
+                            <!-- Подсветка во время валидного DragOver (add ИЛИ reorder) —
+                                 минимальный визуальный фидбек, см. DragDropListHelper.OnReorderDragOver. -->
+                            <Style.Triggers>
+                                <Trigger Property="behaviors:DragDropListHelper.IsDropHighlighted" Value="True">
+                                    <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.Style>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid x:Name="PlaylistTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent"
+                                  Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  behaviors:TrackContextMenuBehavior.Attach="True"
+                                  behaviors:DragDropListHelper.IsReorderSource="True"
+                                  ContextMenu="{StaticResource PlaylistDetailTrackRowContextMenu}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="30" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.InputBindings>
+                                    <MouseBinding MouseAction="LeftDoubleClick"
+                                                  Command="{Binding DataContext.PlayPlaylistTrackCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  CommandParameter="{Binding}" />
+                                </Grid.InputBindings>
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=(ItemsControl.AlternationIndex), Converter={StaticResource IndexToTrackNumberConverter}}"
+                                           Foreground="{StaticResource MutedForegroundBrush}" FontSize="12" />
+                                <TextBlock x:Name="PlaylistTrackTitle" Grid.Column="1" Text="{Binding Title}" Foreground="{StaticResource ForegroundBrush}"
+                                           FontSize="13" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="2" Text="{Binding DurationText}"
+                                           Foreground="{StaticResource MutedForegroundBrush}" FontSize="11"
+                                           Margin="8,0,0,0" />
+                            </Grid>
+                            <DataTemplate.Triggers>
+                                <!-- Подсветка играющего трека (PlayingTrack берём с окна — DataContext детали = состояние). -->
+                                <DataTrigger Value="True">
+                                    <DataTrigger.Binding>
+                                        <MultiBinding Converter="{StaticResource TrackIdentityMatchConverter}">
+                                            <Binding />
+                                            <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.PlayingTrack" />
+                                        </MultiBinding>
+                                    </DataTrigger.Binding>
+                                    <Setter TargetName="PlaylistTrackRow" Property="Background" Value="#402A2018" />
+                                    <Setter TargetName="PlaylistTrackTitle" Property="Foreground" Value="{StaticResource PrimaryBrush}" />
+                                    <Setter TargetName="PlaylistTrackTitle" Property="FontWeight" Value="SemiBold" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock Text="В плейлисте пока нет треков — добавьте их через правый клик или перетаскиванием"
+                           Foreground="{StaticResource MutedForegroundBrush}" FontSize="13"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                           TextWrapping="Wrap" MaxWidth="360"
+                           Visibility="{Binding Playlist.Tracks.Count, Converter={StaticResource CountToVisibilityConverter}, ConverterParameter=Invert}" />
+            </Grid>
+        </DockPanel>
+    </DataTemplate>
+
+</ResourceDictionary>

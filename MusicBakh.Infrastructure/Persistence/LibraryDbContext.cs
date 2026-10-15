@@ -19,6 +19,8 @@ public sealed class LibraryDbContext : DbContext
     internal DbSet<KeyValueEntryEntity> KeyValueStore => Set<KeyValueEntryEntity>();
     internal DbSet<TagEntity> Tags => Set<TagEntity>();
     internal DbSet<TrackTagEntity> TrackTags => Set<TrackTagEntity>();
+    internal DbSet<PlaylistEntity> Playlists => Set<PlaylistEntity>();
+    internal DbSet<PlaylistTrackEntity> PlaylistTracks => Set<PlaylistTrackEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,5 +29,7 @@ public sealed class LibraryDbContext : DbContext
         modelBuilder.ApplyConfiguration(new KeyValueEntryConfiguration());
         modelBuilder.ApplyConfiguration(new TagEntityConfiguration());
         modelBuilder.ApplyConfiguration(new TrackTagEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new PlaylistEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new PlaylistTrackEntityConfiguration());
     }
 }

@@ -36,10 +36,12 @@ public sealed class OverflowChipPanelTests
 
     private static void RunInSta(Action test)
     {
-        var staThread = new Thread(() => test()) { IsBackground = false };
+        Exception? failure = null;
+        var staThread = new Thread(() => { try { test(); } catch (Exception ex) { failure = ex; } }) { IsBackground = true };
         staThread.SetApartmentState(ApartmentState.STA);
         staThread.Start();
-        staThread.Join();
+        if (!staThread.Join(TimeSpan.FromSeconds(30))) throw new TimeoutException("STA test exceeded 30 seconds.");
+        if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     [Fact]

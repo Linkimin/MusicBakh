@@ -10,5 +10,7 @@ namespace MusicBakh.Application.Abstractions;
 /// </summary>
 public interface ITrackImporter
 {
+    /// <summary>Удаляет принадлежащие импортёру файлы неподтверждённого кандидата.</summary>
+    void Discard(TrackImportCandidate candidate);
     Task<ImportResult> ImportAsync(ImportRequest request, IProgress<double>? progress, CancellationToken cancellationToken);
 }

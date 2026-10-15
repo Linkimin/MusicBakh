@@ -35,6 +35,11 @@ public sealed class TrackImporter : ITrackImporter
 
     public async Task<ImportResult> ImportAsync(ImportRequest request, IProgress<double>? progress, CancellationToken cancellationToken)
     {
+        var createdFiles = new List<string>();
+        bool completed = false;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromMinutes(2));
+        cancellationToken = deadline.Token;
         try
         {
             string audioPath;
@@ -43,11 +48,11 @@ public sealed class TrackImporter : ITrackImporter
             switch (request)
             {
                 case LocalFileImportRequest local:
-                    (audioPath, filenameHint) = await CopyLocalAsync(local.FilePath, cancellationToken).ConfigureAwait(false);
+                    (audioPath, filenameHint) = await CopyLocalAsync(local.FilePath, createdFiles, cancellationToken).ConfigureAwait(false);
                     progress?.Report(0.5);
                     break;
                 case UrlImportRequest url:
-                    (audioPath, filenameHint) = await DownloadAsync(url.Url, progress, cancellationToken).ConfigureAwait(false);
+                    (audioPath, filenameHint) = await DownloadAsync(url.Url, progress, createdFiles, cancellationToken).ConfigureAwait(false);
                     break;
                 default:
                     return ImportResult.Error("Неизвестный тип источника.");
@@ -56,12 +61,16 @@ public sealed class TrackImporter : ITrackImporter
             ResolvedMetadata metadata = await _metadataResolver.ResolveAsync(audioPath, filenameHint, cancellationToken).ConfigureAwait(false);
             ResolvedCover cover = await _coverResolver.ResolveAsync(metadata, cancellationToken).ConfigureAwait(false);
 
-            string coverPath = Path.Combine(_paths.CoversDirectory, $"{Guid.NewGuid():N}.{cover.Extension}");
+            string extension = cover.Extension.ToLowerInvariant();
+            if (extension is not ("png" or "jpg" or "jpeg" or "webp"))
+                throw new IOException("Неподдерживаемый формат обложки.");
+            string coverPath = Path.Combine(_paths.CoversDirectory, $"{Guid.NewGuid():N}.{extension}");
+            createdFiles.Add(coverPath);
             await File.WriteAllBytesAsync(coverPath, cover.Bytes, cancellationToken).ConfigureAwait(false);
 
             progress?.Report(1.0);
 
-            return ImportResult.Success(new TrackImportCandidate
+            var candidate = new TrackImportCandidate
             {
                 AudioFilePath = audioPath,
                 CoverFilePath = coverPath,
@@ -73,7 +82,10 @@ public sealed class TrackImporter : ITrackImporter
                 Year = metadata.Year,
                 TrackNumber = metadata.TrackNumber,
                 AlbumArtist = metadata.AlbumArtist
-            });
+            };
+            cancellationToken.ThrowIfCancellationRequested();
+            completed = true;
+            return ImportResult.Success(candidate);
         }
         catch (OperationCanceledException)
         {
@@ -96,9 +108,14 @@ public sealed class TrackImporter : ITrackImporter
             // Любое нештатное исключение не должно оставлять окно в зависшем состоянии.
             return ImportResult.Error($"Неожиданная ошибка: {exception.Message}");
         }
+        finally
+        {
+            if (!completed)
+                foreach (string path in createdFiles) TryDelete(path);
+        }
     }
 
-    private async Task<(string AudioPath, string FilenameHint)> CopyLocalAsync(string sourcePath, CancellationToken cancellationToken)
+    private async Task<(string AudioPath, string FilenameHint)> CopyLocalAsync(string sourcePath, List<string> createdFiles, CancellationToken cancellationToken)
     {
         if (!File.Exists(sourcePath))
         {
@@ -112,6 +129,7 @@ public sealed class TrackImporter : ITrackImporter
         }
 
         string targetPath = Path.Combine(_paths.MusicDirectory, $"{Guid.NewGuid():N}{extension}");
+        createdFiles.Add(targetPath);
         await using FileStream sourceStream = File.OpenRead(sourcePath);
         await using FileStream targetStream = File.Create(targetPath);
         await sourceStream.CopyToAsync(targetStream, cancellationToken).ConfigureAwait(false);
@@ -119,7 +137,7 @@ public sealed class TrackImporter : ITrackImporter
         return (targetPath, Path.GetFileNameWithoutExtension(sourcePath));
     }
 
-    private async Task<(string AudioPath, string FilenameHint)> DownloadAsync(string url, IProgress<double>? progress, CancellationToken cancellationToken)
+    private async Task<(string AudioPath, string FilenameHint)> DownloadAsync(string url, IProgress<double>? progress, List<string> createdFiles, CancellationToken cancellationToken)
     {
         var uri = new Uri(url, UriKind.Absolute);
         if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
@@ -134,15 +152,17 @@ public sealed class TrackImporter : ITrackImporter
         response.EnsureSuccessStatusCode();
 
         string? contentType = response.Content.Headers.ContentType?.MediaType;
-        if (Array.IndexOf(AllowedExtensions, urlExtension) < 0
-            && (contentType is null || !contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)))
+        bool supportedType = contentType is "audio/mpeg" or "audio/mp3" or "audio/wav" or "audio/x-wav" or "audio/wave";
+        if ((!supportedType && contentType?.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) == true)
+            || (Array.IndexOf(AllowedExtensions, urlExtension) < 0 && !supportedType)
+            || contentType is "text/html" or "application/json")
         {
             throw new IOException("Ссылка не указывает на mp3/wav файл.");
         }
 
         string extension = Array.IndexOf(AllowedExtensions, urlExtension) >= 0
             ? urlExtension
-            : (contentType?.Equals("audio/wav", StringComparison.OrdinalIgnoreCase) == true ? ".wav" : ".mp3");
+            : (contentType is "audio/wav" or "audio/x-wav" or "audio/wave" ? ".wav" : ".mp3");
 
         long? totalBytes = response.Content.Headers.ContentLength;
         if (totalBytes.HasValue && totalBytes.Value > MaxDownloadBytes)
@@ -151,6 +171,7 @@ public sealed class TrackImporter : ITrackImporter
         }
 
         string targetPath = Path.Combine(_paths.MusicDirectory, $"{Guid.NewGuid():N}{extension}");
+        createdFiles.Add(targetPath);
         await using FileStream targetStream = File.Create(targetPath);
         await using Stream sourceStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 
@@ -175,5 +196,30 @@ public sealed class TrackImporter : ITrackImporter
         }
 
         return (targetPath, Path.GetFileNameWithoutExtension(urlPath));
+    }
+
+    public void Discard(TrackImportCandidate candidate)
+    {
+        DeleteManaged(candidate.AudioFilePath, _paths.MusicDirectory);
+        DeleteManaged(candidate.CoverFilePath, _paths.CoversDirectory);
+    }
+
+    private static void DeleteManaged(string path, string directory)
+    {
+        // Удаляем только UUID-файлы, созданные импортёром в его собственном каталоге.
+        if (string.IsNullOrWhiteSpace(path)) return;
+        string fullPath = Path.GetFullPath(path);
+        if (string.Equals(Path.GetDirectoryName(fullPath), Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)
+            && Guid.TryParseExact(Path.GetFileNameWithoutExtension(fullPath), "N", out _))
+            TryDelete(fullPath);
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { File.Delete(path); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Trace.TraceWarning("Не удалось очистить незавершённый импорт: {0}", ex.Message);
+        }
     }
 }

@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:converters="clr-namespace:MusicLibrary.Converters">
+                    xmlns:converters="clr-namespace:MusicLibrary.Converters"
+                    xmlns:behaviors="clr-namespace:MusicLibrary.Behaviors">
 
     <!-- Конвертеры объявлены здесь локально: {StaticResource} внутри DataTemplate этого
          merged-словаря резолвится при загрузке шаблона и НЕ видит ключей, объявленных прямыми
@@ -13,13 +14,46 @@
          играющего трека в детали альбома/исполнителя сравнивает трек строки с PlayingTrack. -->
     <converters:TrackIdentityMatchConverter x:Key="TrackIdentityMatchConverter" />
 
+    <!-- Контекст-меню трек-строки в detail (Task 7) — идентично TrackRowContextMenu из
+         TrackTemplates.xaml, но локальная копия: PlacementTarget.Tag/AncestorType=ContextMenu
+         резолвится при загрузке шаблона внутри ЭТОГО словаря, {StaticResource} на ключ из
+         другого merged-словаря недоступен (тот же D-lesson, см. комментарий выше). -->
+    <ContextMenu x:Key="DetailTrackRowContextMenu" x:Shared="False">
+        <MenuItem Header="Добавить в плейлист"
+                  ItemsSource="{Binding PlacementTarget.Tag.Playlists.Playlists, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.ItemContainerStyle>
+                <Style TargetType="MenuItem">
+                    <Setter Property="Header" Value="{Binding Name}" />
+                    <Setter Property="Command" Value="{Binding PlacementTarget.Tag.AddContextToPlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <Setter Property="CommandParameter" Value="{Binding}" />
+                </Style>
+            </MenuItem.ItemContainerStyle>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="Новый плейлист…"
+                  Command="{Binding PlacementTarget.Tag.Playlists.StartNewPlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </ContextMenu>
+
     <!-- ========== Tracks view: переиспользует существующий ListBox с TrackCardTemplate ========== -->
+    <!-- SelectionMode=Extended (Task 8): мульти-выбор Ctrl/Shift-кликом — источник батча id для
+         drag-and-drop добавления в плейлист (DragDropListHelper.SelectedTrackIds). SelectedItem
+         (TwoWay) при этом продолжает отражать "основной" выбранный трек для Play/Save/Delete —
+         WPF синхронизирует его с последним элементом SelectedItems. -->
     <DataTemplate x:Key="TracksRootTemplate">
+        <Grid>
         <ListBox ItemsSource="{Binding DataContext.DisplayedTracks, RelativeSource={RelativeSource AncestorType=Window}}"
                  SelectedItem="{Binding DataContext.SelectedTrack, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
+                 SelectionMode="Extended"
                  ItemTemplate="{StaticResource TrackCardTemplate}"
                  ItemContainerStyle="{StaticResource TrackListBoxItemStyle}"
                  Style="{StaticResource PanelListBoxStyle}" />
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20"
+                    Visibility="{Binding DataContext.DisplayedTracks.Count, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource CountToVisibilityConverter}, ConverterParameter=Invert}">
+            <TextBlock Text="Треки не найдены" FontSize="18" Foreground="{StaticResource ForegroundBrush}" TextAlignment="Center"/>
+            <TextBlock Text="Измените поиск, сбросьте фильтры или добавьте музыку." FontSize="13" Foreground="{StaticResource MutedForegroundBrush}" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,12"/>
+            <Button Content="Сбросить фильтры" Command="{Binding DataContext.ClearFiltersCommand, RelativeSource={RelativeSource AncestorType=Window}}" Style="{StaticResource SecondaryButtonStyle}"/>
+        </StackPanel>
+        </Grid>
     </DataTemplate>
 
     <!-- ========== Albums view: 3xN сетка плиток ========== -->
@@ -176,13 +210,20 @@
             <!-- Двойной клик по строке — PlayDetailTrackCommand (bug #4 fix): очередь строится из
                  Album.Tracks текущей открытой детали, а не из DisplayedTracks (вкладка «Треки»). -->
             <Grid>
+                <!-- SelectionMode=Extended + IsDragSource на строке (Task 8): drag добавления в
+                     плейлист прямо из детали альбома, тем же путём, что вкладка «Треки». -->
                 <ListBox ItemsSource="{Binding Album.Tracks}"
                          SelectedItem="{Binding DataContext.SelectedTrack, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
+                         SelectionMode="Extended"
                          ItemContainerStyle="{StaticResource TrackListBoxItemStyle}"
                          Style="{StaticResource PanelListBoxStyle}">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid x:Name="AlbumTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent">
+                            <Grid x:Name="AlbumTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent"
+                                  Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  behaviors:TrackContextMenuBehavior.Attach="True"
+                                  behaviors:DragDropListHelper.IsDragSource="True"
+                                  ContextMenu="{StaticResource DetailTrackRowContextMenu}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="30" />
                                     <ColumnDefinition Width="*" />
@@ -291,7 +332,14 @@
                                       Visibility="{Binding Artist.LooseTracks.Count, Converter={StaticResource CountToVisibilityConverter}}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid x:Name="LooseTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent">
+                                    <!-- IsDragSource (Task 8): строка не внутри ListBox (обычный ItemsControl,
+                                         без выделения) — FindSelectedItems не найдёт Selector и вернёт null,
+                                         SelectedTrackIds корректно упадёт на "только эта строка" (см. helper). -->
+                                    <Grid x:Name="LooseTrackRow" Margin="6,4" Cursor="Hand" Background="Transparent"
+                                          Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          behaviors:TrackContextMenuBehavior.Attach="True"
+                                          behaviors:DragDropListHelper.IsDragSource="True"
+                                          ContextMenu="{StaticResource DetailTrackRowContextMenu}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />

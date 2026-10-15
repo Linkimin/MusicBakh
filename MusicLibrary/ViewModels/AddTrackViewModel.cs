@@ -20,10 +20,13 @@ public enum AddTrackMode
 /// файла или ввод URL — и поддерживает три фазы: подготовка → импорт с прогрессом
 /// → редактирование найденных метаданных перед сохранением.
 /// </summary>
-public sealed class AddTrackViewModel : ViewModelBase
+public sealed class AddTrackViewModel : ViewModelBase, IDisposable
 {
     private readonly IOpenFileDialogService _openFileDialog;
     private readonly ITrackImporter _importer;
+    private readonly Func<TrackImportCandidate, Track>? _save;
+    private CancellationTokenSource? _importCancellation;
+    private bool _closed;
 
     private AddTrackMode _mode = AddTrackMode.LocalFile;
     private string _localFilePath = string.Empty;
@@ -38,10 +41,11 @@ public sealed class AddTrackViewModel : ViewModelBase
     private string _editArtist = string.Empty;
     private string _editGenre = string.Empty;
 
-    public AddTrackViewModel(IOpenFileDialogService openFileDialog, ITrackImporter importer)
+    public AddTrackViewModel(IOpenFileDialogService openFileDialog, ITrackImporter importer, Func<TrackImportCandidate, Track>? save = null)
     {
         _openFileDialog = openFileDialog;
         _importer = importer;
+        _save = save;
 
         BrowseFileCommand = new RelayCommand(_ => BrowseFile(), _ => Mode == AddTrackMode.LocalFile && !IsImporting);
         StartImportCommand = new RelayCommand(_ => _ = StartImportAsync(), _ => CanStartImport());
@@ -158,6 +162,7 @@ public sealed class AddTrackViewModel : ViewModelBase
     }
 
     public TrackImportCandidate? Result { get; private set; }
+    public Track? SavedTrack { get; private set; }
 
     private void BrowseFile()
     {
@@ -184,18 +189,28 @@ public sealed class AddTrackViewModel : ViewModelBase
 
     private async Task StartImportAsync()
     {
+        if (IsImporting || _closed) return;
+        ClearCandidate();
+        using var cancellation = new CancellationTokenSource();
+        _importCancellation = cancellation;
         IsImporting = true;
         ProgressValue = 0;
         SetStatus(OperationResult.Info("Импортирую трек..."));
 
         try
         {
-            var progress = new Progress<double>(value => ProgressValue = Math.Clamp(value, 0, 1));
+            var progress = new Progress<double>(value => { if (!_closed) ProgressValue = Math.Clamp(value, 0, 1); });
             ImportRequest request = Mode == AddTrackMode.LocalFile
                 ? new LocalFileImportRequest(LocalFilePath)
                 : new UrlImportRequest(UrlInput.Trim());
 
-            ImportResult result = await _importer.ImportAsync(request, progress, CancellationToken.None);
+            ImportResult result = await _importer.ImportAsync(request, progress, cancellation.Token);
+
+            if (_closed || cancellation.IsCancellationRequested)
+            {
+                if (result.Candidate is not null) _importer.Discard(result.Candidate);
+                return;
+            }
 
             if (!result.IsSuccess || result.Candidate is null)
             {
@@ -219,6 +234,7 @@ public sealed class AddTrackViewModel : ViewModelBase
         }
         finally
         {
+            _importCancellation = null;
             IsImporting = false;
         }
     }
@@ -240,13 +256,42 @@ public sealed class AddTrackViewModel : ViewModelBase
         _candidate.Artist = string.IsNullOrWhiteSpace(EditArtist) ? "Неизвестный исполнитель" : EditArtist.Trim();
         _candidate.Genre = string.IsNullOrWhiteSpace(EditGenre) ? "Без жанра" : EditGenre.Trim();
 
+        try
+        {
+            SavedTrack = _save?.Invoke(_candidate);
+        }
+        catch (Exception ex) when (Services.StorageErrors.IsExpected(ex))
+        {
+            System.Diagnostics.Trace.TraceError("Import save failed: {0}", ex);
+            SetStatus(OperationResult.Error($"Не удалось сохранить трек: {ex.Message}. Повторите сохранение или отмените импорт."));
+            return;
+        }
+
         Result = _candidate;
         RequestClose(true);
     }
 
     private void RequestClose(bool confirmed)
     {
+        if (_closed) return;
+        Dispose();
         CloseRequested?.Invoke(this, confirmed);
+    }
+
+    private void ClearCandidate()
+    {
+        CoverPreview = null;
+        if (_candidate is not null && !ReferenceEquals(_candidate, Result)) _importer.Discard(_candidate);
+        _candidate = null;
+        OnPropertyChanged(nameof(HasCandidate));
+    }
+
+    public void Dispose()
+    {
+        if (_closed) return;
+        _closed = true;
+        _importCancellation?.Cancel();
+        ClearCandidate();
     }
 
     private void SetStatus(OperationResult result)
@@ -265,6 +310,7 @@ public sealed class AddTrackViewModel : ViewModelBase
         var bitmap = new BitmapImage();
         bitmap.BeginInit();
         bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.DecodePixelWidth = 400;
         bitmap.UriSource = new Uri(path);
         bitmap.EndInit();
         bitmap.Freeze();

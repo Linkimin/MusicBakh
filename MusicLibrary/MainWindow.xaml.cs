@@ -37,6 +37,14 @@ public partial class MainWindow : Window
         NativeWindowAppearance.Apply(this);
     }
 
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        _viewModel.RefreshTagFiltersCommand.Execute(null);
+    }
+
+    private void OnTagFiltersChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => RebuildTagChips();
+
     private void OnFindCommandExecuted(object sender, ExecutedRoutedEventArgs e)
     {
         // Ctrl+F: фокус и выделение текста в строке поиска. Это чисто UI-операция
@@ -60,6 +68,47 @@ public partial class MainWindow : Window
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
+        // Инлайн-создание плейлиста (PlaylistsRootTemplate, x:Name="PlaylistNameInput"):
+        // KeyDown из TextBox внутри ResourceDictionary-шаблона не может быть подключён
+        // атрибутом KeyDown="..." — ResourceDictionary без x:Class не резолвит обработчики
+        // (MC6024). Событие — routed и всплывает до Window, поэтому ловим его здесь по
+        // имени элемента-источника. Enter подтверждает имя, Esc отменяет создание.
+        if (e.OriginalSource is System.Windows.Controls.TextBox { Name: "PlaylistNameInput" } nameInput)
+        {
+            if (e.Key == Key.Enter)
+            {
+                _viewModel.Playlists.ConfirmNewPlaylistName(nameInput.Text);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                _viewModel.Playlists.IsCreating = false;
+                e.Handled = true;
+            }
+            return;
+        }
+
+        // Инлайн-переименование плейлиста (PlaylistRowTemplate, x:Name="PlaylistRenameInput"):
+        // DataContext строки — сам Playlist, поэтому берём его прямо с TextBox.DataContext
+        // (тот же MC6024-обход, что и для создания выше). Enter подтверждает, Esc отменяет.
+        if (e.OriginalSource is System.Windows.Controls.TextBox { Name: "PlaylistRenameInput" } renameInput)
+        {
+            if (renameInput.DataContext is Playlist targetPlaylist)
+            {
+                if (e.Key == Key.Enter)
+                {
+                    _viewModel.Playlists.RenamePlaylist(targetPlaylist, renameInput.Text);
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.Escape)
+                {
+                    _viewModel.Playlists.CancelRenameCommand.Execute(null);
+                    e.Handled = true;
+                }
+            }
+            return;
+        }
+
         // Esc на уровне окна — drill-down back, но только если фокус НЕ в строке
         // поиска: там Esc уже обрабатывается в OnSearchBoxKeyDown (очистка поиска)
         // и выставляет e.Handled=true, так что сюда событие не дойдёт.
@@ -76,6 +125,7 @@ public partial class MainWindow : Window
         HookTagFiltersSync();
         RebuildTagChips();
         // Подписка на PropertyChanged VM: обновляем список в открытом popup тегов.
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
 
@@ -83,7 +133,7 @@ public partial class MainWindow : Window
     {
         if (_viewModel.TagFilters is System.Collections.Specialized.INotifyCollectionChanged ncc && _tagFiltersSource is null)
         {
-            ncc.CollectionChanged += (_, _) => RebuildTagChips();
+            ncc.CollectionChanged += OnTagFiltersChanged;
             _tagFiltersSource = ncc;
         }
     }
@@ -230,6 +280,24 @@ public partial class MainWindow : Window
         _viewModel.IsSeeking = true;
     }
 
+    private void OnSeekDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        CommitSeek(sender);
+    }
+
+    private void OnSeekKeyUp(object sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown)
+            CommitSeek(sender);
+    }
+
+    private void CommitSeek(object sender)
+    {
+        if (sender is System.Windows.Controls.Slider slider)
+            _viewModel.SeekToCommand.Execute(TimeSpan.FromSeconds(slider.Value));
+        _viewModel.IsSeeking = false;
+    }
+
     private void OnSeekPreviewMouseUp(object sender, MouseButtonEventArgs e)
     {
         if (sender is System.Windows.Controls.Slider slider)
@@ -242,6 +310,9 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        if (_tagFiltersSource is not null) _tagFiltersSource.CollectionChanged -= OnTagFiltersChanged;
+        SourceInitialized -= OnSourceInitialized;
         _viewModel.Dispose();
         base.OnClosed(e);
     }

@@ -24,7 +24,7 @@ public sealed class SqliteTrackRepository : ITrackRepository
         return ctx.Tracks
             .OrderBy(t => t.IsBuiltIn ? 0 : 1)
             .ThenBy(t => t.Id)
-            .Select(MapToDomain)
+            .Select(TrackMapper.ToDomain)
             .ToList();
     }
 
@@ -32,7 +32,7 @@ public sealed class SqliteTrackRepository : ITrackRepository
     {
         using var ctx = _contextFactory();
         var entity = ctx.Tracks.FirstOrDefault(t => t.Id == id);
-        return entity is null ? null : MapToDomain(entity);
+        return entity is null ? null : TrackMapper.ToDomain(entity);
     }
 
     public Track Add(Track track)
@@ -61,7 +61,7 @@ public sealed class SqliteTrackRepository : ITrackRepository
         ctx.Tracks.Add(entity);
         ctx.SaveChanges();
 
-        return MapToDomain(entity);
+        return TrackMapper.ToDomain(entity);
     }
 
     public void Update(Track track)
@@ -107,22 +107,4 @@ public sealed class SqliteTrackRepository : ITrackRepository
         ctx.Tracks.Remove(entity);
         ctx.SaveChanges();
     }
-
-    private static Track MapToDomain(TrackEntity e) => new()
-    {
-        Id = e.Id,
-        Title = e.Title,
-        Artist = e.Artist,
-        Album = e.Album,
-        Genre = e.Genre,
-        Duration = TimeSpan.FromTicks(e.DurationTicks),
-        FilePath = e.FilePath,
-        CoverPath = e.CoverPath,
-        Rating = e.Rating,
-        Reaction = (TrackReaction)e.Reaction,
-        Year = e.Year,
-        TrackNumber = e.TrackNumber,
-        AlbumArtist = e.AlbumArtist,
-        IsBuiltIn = e.IsBuiltIn
-    };
 }

@@ -53,6 +53,51 @@ namespace MusicBakh.Infrastructure.Persistence.Migrations
                     b.ToTable("ListeningHistory", (string)null);
                 });
 
+            modelBuilder.Entity("MusicBakh.Infrastructure.Persistence.Entities.PlaylistEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.ToTable("Playlists", (string)null);
+                });
+
+            modelBuilder.Entity("MusicBakh.Infrastructure.Persistence.Entities.PlaylistTrackEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("PlaylistId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TrackId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrackId");
+
+                    b.HasIndex("PlaylistId", "Position");
+
+                    b.ToTable("PlaylistTracks", (string)null);
+                });
+
             modelBuilder.Entity("MusicBakh.Infrastructure.Persistence.Entities.TagEntity", b =>
                 {
                     b.Property<int>("Id")
@@ -184,6 +229,25 @@ namespace MusicBakh.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TrackId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Track");
+                });
+
+            modelBuilder.Entity("MusicBakh.Infrastructure.Persistence.Entities.PlaylistTrackEntity", b =>
+                {
+                    b.HasOne("MusicBakh.Infrastructure.Persistence.Entities.PlaylistEntity", "Playlist")
+                        .WithMany()
+                        .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MusicBakh.Infrastructure.Persistence.Entities.TrackEntity", "Track")
+                        .WithMany()
+                        .HasForeignKey("TrackId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Playlist");
 
                     b.Navigation("Track");
                 });

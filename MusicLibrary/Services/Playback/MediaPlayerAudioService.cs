@@ -21,7 +21,7 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
 
     private MediaPlayer CreatePlayer(string? filePath)
     {
-        var player = new MediaPlayer();
+        var player = new MediaPlayer { Volume = PlayerSettings.Default.Volume };
 
         player.MediaOpened += (_, _) =>
         {
@@ -33,7 +33,7 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
 
         player.MediaEnded += (_, _) =>
         {
-            if (!ReferenceEquals(player, _player))
+            if (!IsCurrentPlayer(player, filePath))
             {
                 return;
             }
@@ -45,7 +45,7 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
 
         player.MediaFailed += (_, args) =>
         {
-            if (!ReferenceEquals(player, _player))
+            if (!IsCurrentPlayer(player, filePath))
             {
                 return;
             }
@@ -60,7 +60,7 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
 
     private bool IsCurrentPlayer(MediaPlayer player, string? filePath)
     {
-        return ReferenceEquals(player, _player)
+        return !_isDisposed && ReferenceEquals(player, _player)
             && filePath is not null
             && string.Equals(_currentFilePath, filePath, StringComparison.OrdinalIgnoreCase);
     }
@@ -94,7 +94,7 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
     {
         get => _player.Volume;
         // Защитный clamp на случай, если откуда-то прилетит volume > 1 или < 0.
-        set => _player.Volume = Math.Clamp(value, 0.0, 1.0);
+        set { if (double.IsFinite(value)) _player.Volume = Math.Clamp(value, 0.0, 1.0); }
     }
 
     public bool IsMuted
@@ -105,6 +105,8 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
 
     public OperationResult Open(string filePath)
     {
+        if (_isDisposed) return OperationResult.Error("Плеер уже закрыт.");
+        IsPlaying = false;
         try
         {
             double volume = _player.Volume;
@@ -128,6 +130,8 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
 
     public OperationResult Play()
     {
+        if (_isDisposed || _currentFilePath is null)
+            return OperationResult.Error("Сначала выберите трек для воспроизведения.");
         try
         {
             _player.Play();
@@ -162,8 +166,9 @@ public sealed class MediaPlayerAudioService : IAudioPlayerService
             return;
         }
 
+        _isDisposed = true;
+        IsPlaying = false;
         _player.Close();
         _currentFilePath = null;
-        _isDisposed = true;
     }
 }

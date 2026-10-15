@@ -52,11 +52,10 @@ public sealed class TagLibSharpTagReader : ITagReader
                 AlbumArtist = albumArtist
             };
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is TagLib.CorruptFileException or TagLib.UnsupportedFormatException)
         {
-            // TagLib бросает разнообразные исключения на битых/нестандартных файлах.
-            // Импорт продолжается, поля просто остаются пустыми.
-            return new LocalTagInfo();
+            // Отсутствующие теги допустимы, нечитаемый аудиофайл — нет.
+            throw new System.IO.IOException("Аудиофайл повреждён или его формат не поддерживается.", ex);
         }
     }
 }

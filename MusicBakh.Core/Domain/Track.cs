@@ -42,5 +42,5 @@ public sealed class Track
     /// </summary>
     public bool IsBuiltIn { get; init; }
 
-    public string DurationText => Duration.ToString(@"m\:ss");
+    public string DurationText => PlaybackTime.Format(Duration);
 }

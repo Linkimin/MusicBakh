@@ -10,6 +10,19 @@ namespace MusicLibrary.Tests.ViewModels;
 
 public sealed class MainViewModelNavigationTests
 {
+    [Fact]
+    public void Back_RefreshesArtistAfterFiltersChangedInAlbum()
+    {
+        using var vm = CreateVM(new Track { Id = 1, Artist = "A", Album = "B", FilePath = "1.mp3", Rating = 1 });
+        vm.OpenArtistCommand.Execute(vm.DisplayedArtists[0]);
+        vm.OpenAlbumCommand.Execute(vm.DisplayedAlbums[0]);
+        vm.MinRating = 5;
+        vm.BackCommand.Execute(null);
+        var artist = Assert.IsType<LeftColumnState.ArtistDetail>(vm.CurrentLeftColumn).Artist;
+        Assert.Empty(artist.Albums);
+        Assert.Empty(artist.LooseTracks);
+    }
+
     private static MainViewModel CreateVM(params Track[] tracks)
     {
         return CreateVMWithPlayer(out _, tracks);
@@ -448,9 +461,9 @@ public sealed class MainViewModelNavigationTests
 
     private sealed class FakeAudioPlayerService : IAudioPlayerService
     {
-        public event EventHandler<string>? MediaOpened;
+        public event EventHandler<string>? MediaOpened { add { } remove { } }
         public event EventHandler? MediaEnded;
-        public event EventHandler<string>? MediaFailed;
+        public event EventHandler<string>? MediaFailed { add { } remove { } }
 
         public bool IsPlaying => false;
         public TimeSpan Position { get; set; }

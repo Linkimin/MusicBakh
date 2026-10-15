@@ -15,6 +15,8 @@ public sealed class LeftColumnTemplateSelector : DataTemplateSelector
     public DataTemplate? ArtistsTemplate { get; set; }
     public DataTemplate? AlbumDetailTemplate { get; set; }
     public DataTemplate? ArtistDetailTemplate { get; set; }
+    public DataTemplate? PlaylistsTemplate { get; set; }
+    public DataTemplate? PlaylistDetailTemplate { get; set; }
 
     public override DataTemplate? SelectTemplate(object item, DependencyObject container) => item switch
     {
@@ -23,6 +25,8 @@ public sealed class LeftColumnTemplateSelector : DataTemplateSelector
         LeftColumnState.ArtistsRoot  => ArtistsTemplate,
         LeftColumnState.AlbumDetail  => AlbumDetailTemplate,
         LeftColumnState.ArtistDetail => ArtistDetailTemplate,
+        LeftColumnState.PlaylistsRoot   => PlaylistsTemplate,
+        LeftColumnState.PlaylistDetail  => PlaylistDetailTemplate,
         _ => null
     };
 }

@@ -38,11 +38,11 @@ public sealed class TagsViewModel : ViewModelBase
         Tags = new ObservableCollection<Tag>(_repository.GetAll());
         _selectedColor = PresetColors[0];
 
-        CreateTagCommand = new RelayCommand(_ => CreateTag(), _ => !string.IsNullOrWhiteSpace(NewTagName));
-        DeleteTagCommand = new RelayCommand(_ => DeleteTag(), _ => SelectedTag is not null);
-        RenameTagCommand = new RelayCommand(_ => RenameTag(),
+        CreateTagCommand = new RelayCommand(_ => ExecuteStorage(CreateTag), _ => !string.IsNullOrWhiteSpace(NewTagName));
+        DeleteTagCommand = new RelayCommand(_ => ExecuteStorage(DeleteTag), _ => SelectedTag is not null);
+        RenameTagCommand = new RelayCommand(_ => ExecuteStorage(RenameTag),
             _ => SelectedTag is not null && !string.IsNullOrWhiteSpace(RenameInput));
-        SetColorCommand = new RelayCommand(c => SetColor(c as string), _ => SelectedTag is not null);
+        SetColorCommand = new RelayCommand(c => ExecuteStorage(() => SetColor(c as string)), _ => SelectedTag is not null);
         // Палитра в блоке «Новый тег» просто меняет SelectedColor без обращения к репозиторию.
         PickNewColorCommand = new RelayCommand(c => SelectedColor = c as string);
     }
@@ -103,6 +103,16 @@ public sealed class TagsViewModel : ViewModelBase
     public ICommand RenameTagCommand { get; }
     public ICommand SetColorCommand { get; }
     public ICommand PickNewColorCommand { get; }
+
+    private void ExecuteStorage(Action action)
+    {
+        try { action(); }
+        catch (Exception ex) when (Services.StorageErrors.IsExpected(ex))
+        {
+            System.Diagnostics.Trace.TraceError("Tag operation: {0}", ex);
+            ErrorMessage = $"Не удалось сохранить теги: {ex.Message}";
+        }
+    }
 
     private void CreateTag()
     {

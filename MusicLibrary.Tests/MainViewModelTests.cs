@@ -9,6 +9,173 @@ namespace MusicLibrary.Tests;
 
 public sealed class MainViewModelTests
 {
+    [Theory]
+    [InlineData("next")]
+    [InlineData("double-click")]
+    [InlineData("album")]
+    public void MissingNextFile_PreservesCurrentQueueAndControls(string action)
+    {
+        var tracks = new[]
+        {
+            new Track { Id = 1, Title = "Available", FilePath = "1.mp3" },
+            new Track { Id = 2, Title = "Missing", FilePath = "missing.mp3", Artist = "A", Album = "B" }
+        };
+        var player = new FakeAudioPlayerService();
+        using var vm = CreateViewModel(tracks, player, new FakeFileService("missing.mp3"));
+        vm.PlayTrackCommand.Execute(tracks[0]);
+        if (action == "next") vm.NextTrackCommand.Execute(null);
+        else if (action == "album") vm.PlayAlbumCommand.Execute(vm.DisplayedAlbums.Single());
+        else vm.PlayTrackCommand.Execute(tracks[1]);
+        Assert.Equal(1, vm.PlayingTrack?.Id);
+        Assert.True(vm.IsPlaying);
+        Assert.False(vm.PreviousTrackCommand.CanExecute(null));
+        Assert.True(vm.NextTrackCommand.CanExecute(null));
+        Assert.Equal(new[] { 1, 2 }, vm.PlaybackQueue.Select(t => t.Id));
+    }
+
+    [Fact]
+    public void GlobalTransport_PausesPlayingTrackWithoutChangingSelection()
+    {
+        var (vm, player, _) = CreateViewModelWithPlayer();
+        using (vm)
+        {
+            vm.PlayTrackCommand.Execute(vm.DisplayedTracks[0]);
+            vm.SelectedTrack = vm.DisplayedTracks[1];
+            vm.TogglePlaybackCommand.Execute(null);
+            Assert.False(player.IsPlaying);
+            Assert.Equal(2, vm.SelectedTrack.Id);
+            Assert.Equal(1, vm.PlayingTrack?.Id);
+        }
+    }
+    [Fact]
+    public void DeleteLibraryEntry_PreservesExternalOriginal()
+    {
+        string path = Path.GetTempFileName();
+        try
+        {
+            var track = new Track { Id = 1, FilePath = path };
+            using var vm = new MainViewModel(new RecordingTrackRepository(new[] { track }),
+                new MusicBakh.Infrastructure.FileSystem.FileService(), new FakeSaveFileDialogService(),
+                new FakeAudioPlayerService(), new FakeListeningHistoryRepository(), new FakePlayerSettingsRepository());
+            vm.SelectedTrack = track;
+            vm.DeleteTrackCommand.Execute(null);
+            Assert.True(File.Exists(path));
+            Assert.Empty(vm.DisplayedTracks);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void SettingsFailure_DoesNotInterruptVolumeChange()
+    {
+        var (vm, player, repo) = CreateViewModelWithPlayer();
+        using (vm)
+        {
+            repo.SaveError = new IOException("disk unavailable");
+            vm.Volume = 0.25;
+            Assert.Equal(0.25, player.Volume);
+            Assert.Equal(OperationMessageKind.Error, vm.StatusKind);
+        }
+    }
+
+    [Fact]
+    public void AddTrack_RefreshesAlbums_AndRespectsRatingFilter()
+    {
+        using var vm = CreateViewModel();
+        vm.MinRating = 5;
+        vm.AddTrack(new Track { Id = 100, Title = "New", Album = "New album", Artist = "New artist" });
+        Assert.Empty(vm.DisplayedTracks);
+        vm.MinRating = 0;
+        Assert.Contains(vm.DisplayedAlbums, a => a.Title == "New album");
+    }
+
+    [Fact]
+    public void DeleteTrack_RemovesCanonicalTrackFromAlbumsQueueAndHistory()
+    {
+        var a = new Track { Id = 1, Album = "Album", Artist = "A", FilePath = "1.mp3" };
+        var b = new Track { Id = 2, Album = "Album", Artist = "A", FilePath = "2.mp3" };
+        var repo = new RecordingTrackRepository(new[] { a, b });
+        using var vm = CreateViewModelWithRepo(repo);
+        vm.PlayAlbumCommand.Execute(vm.DisplayedAlbums[0]);
+        // Репозитории истории возвращают другой экземпляр того же трека.
+        vm.SelectedTrack = new Track { Id = 2, Album = "Album", Artist = "A", FilePath = "2.mp3" };
+        vm.DeleteTrackCommand.Execute(null);
+        Assert.Single(vm.PlaybackQueue);
+        Assert.Single(Assert.Single(vm.DisplayedAlbums).Tracks);
+        Assert.DoesNotContain(vm.DisplayedTracks, t => t.Id == 2);
+    }
+
+    [Fact]
+    public void RatingChange_RefreshesActiveFilterAndAlbum()
+    {
+        using var vm = CreateViewModelWithRepo(new RecordingTrackRepository(new[] {
+            new Track { Id = 1, Album = "Album", Artist = "A", Rating = 5 }
+        }));
+        vm.MinRating = 5;
+        vm.SelectedTrack = vm.DisplayedTracks[0];
+        vm.SetRatingCommand.Execute("1");
+        Assert.Empty(vm.DisplayedTracks);
+        Assert.Empty(vm.DisplayedAlbums);
+    }
+
+    [Fact]
+    public void Search_FilterDoesNotLoseMatchesBeyondFirst500()
+    {
+        var tracks = Enumerable.Range(1, 600).Select(i => new Track {
+            Id = i, Title = "Song", Genre = i == 600 ? "Jazz" : "Rock"
+        }).ToArray();
+        using var vm = CreateViewModelWithSearch(tracks, new RankedSearchService(tracks));
+        vm.SearchText = "Song";
+        vm.SelectedGenre = "Jazz";
+        Assert.Equal(600, Assert.Single(vm.DisplayedTracks).Id);
+    }
+
+    [Fact]
+    public void PauseResume_PreservesAlbumQueue()
+    {
+        var tracks = new[] {
+            new Track { Id = 1, Album = "Album", Artist = "A", FilePath = "1.mp3" },
+            new Track { Id = 2, Album = "Album", Artist = "A", FilePath = "2.mp3" },
+            new Track { Id = 3, FilePath = "3.mp3" }
+        };
+        using var vm = CreateViewModel(tracks, new FakeAudioPlayerService(), new FakeFileService());
+        vm.PlayAlbumCommand.Execute(vm.DisplayedAlbums[0]);
+        vm.PlayPauseCommand.Execute(null);
+        vm.PlayPauseCommand.Execute(null);
+        Assert.Equal(new[] { 1, 2 }, vm.PlaybackQueue.Select(t => t.Id));
+    }
+
+    [Fact]
+    public void DuplicateQueueEntries_AdvanceByPosition_AndFinish()
+    {
+        var a = new Track { Id = 1, FilePath = "1.mp3" };
+        var b = new Track { Id = 2, FilePath = "2.mp3" };
+        var player = new FakeAudioPlayerService();
+        using var vm = CreateViewModel(new[] { a, b }, player, new FakeFileService());
+        vm.PlayPlaylistCommand.Execute(new MusicLibrary.Services.Library.PlaylistView(
+            new Playlist(1, "Mix", DateTime.UtcNow), new[] { a, a, b }));
+        player.RaiseEndedForTest();
+        Assert.Equal(1, vm.PlayingTrack?.Id);
+        player.RaiseEndedForTest();
+        Assert.Equal(2, vm.PlayingTrack?.Id);
+        player.RaiseEndedForTest();
+        Assert.Null(vm.PlayingTrack);
+    }
+
+    [Fact]
+    public void Pause_IsAvailable_WhenSelectionCleared()
+    {
+        var (vm, player, _) = CreateViewModelWithPlayer();
+        using (vm)
+        {
+            vm.PlayTrackCommand.Execute(vm.DisplayedTracks[0]);
+            vm.SelectedTrack = null;
+            Assert.True(vm.PlayPauseCommand.CanExecute(null));
+            vm.PlayPauseCommand.Execute(null);
+            Assert.False(player.IsPlaying);
+        }
+    }
+
     [Fact]
     public void Constructor_LoadsGenresWithAllGenresFirst()
     {
@@ -1115,12 +1282,17 @@ public sealed class MainViewModelTests
 
     private sealed class FakePlayerSettingsRepository : IPlayerSettingsRepository
     {
+        public Exception? SaveError { get; set; }
         public PlayerSettings Loaded { get; set; } = PlayerSettings.Default;
         public List<PlayerSettings> SavedSnapshots { get; } = new();
         public int? SavedActiveViewIndex { get; private set; }
 
         public PlayerSettings Load() => Loaded;
-        public void Save(PlayerSettings settings) => SavedSnapshots.Add(settings);
+        public void Save(PlayerSettings settings)
+        {
+            if (SaveError is not null) throw SaveError;
+            SavedSnapshots.Add(settings);
+        }
         public int? LoadActiveViewIndex() => SavedActiveViewIndex;
         public void SaveActiveView(MainViewMode view) => SavedActiveViewIndex = (int)view;
     }

@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:converters="clr-namespace:MusicLibrary.Converters">
+                    xmlns:converters="clr-namespace:MusicLibrary.Converters"
+                    xmlns:behaviors="clr-namespace:MusicLibrary.Behaviors">
     <!-- Конвертеры объявлены здесь, потому что MultiBinding.Converter резолвится при загрузке шаблона
          и не видит ключей, добавленных в родительский ResourceDictionary после этого MergedDictionary. -->
     <converters:TrackIdentityMatchConverter x:Key="TrackIdentityMatchConverter" />
@@ -8,41 +9,73 @@
     <converters:TrackTagsOverflowCountMultiConverter x:Key="LocalTrackTagsOverflowCountMultiConverter" />
     <converters:TrackTagsOverflowVisibilityMultiConverter x:Key="LocalTrackTagsOverflowVisibilityMultiConverter" />
 
+    <!-- Контекст-меню трек-строки (Task 7): «Добавить в плейлист ▸» + «Новый плейлист…».
+         PlacementTarget.Tag — единственный способ дотянуться из ContextMenu (отдельное
+         визуальное дерево) до MainViewModel: RelativeSource AncestorType=Window его НЕ видит. -->
+    <ContextMenu x:Key="TrackRowContextMenu" x:Shared="False">
+        <MenuItem Header="Добавить в плейлист"
+                  ItemsSource="{Binding PlacementTarget.Tag.Playlists.Playlists, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.ItemContainerStyle>
+                <Style TargetType="MenuItem">
+                    <Setter Property="Header" Value="{Binding Name}" />
+                    <Setter Property="Command" Value="{Binding PlacementTarget.Tag.AddContextToPlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <Setter Property="CommandParameter" Value="{Binding}" />
+                </Style>
+            </MenuItem.ItemContainerStyle>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="Новый плейлист…"
+                  Command="{Binding PlacementTarget.Tag.Playlists.StartNewPlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </ContextMenu>
+
     <DataTemplate x:Key="TrackCardTemplate">
-        <Border x:Name="CardRoot" Padding="14" CornerRadius="12" Background="{StaticResource AccentBrush}" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" Cursor="Hand">
+        <!-- IsDragSource (Task 8): начинает drag добавления в плейлист по порогу движения мыши
+             (PreviewMouseLeftButtonDown → PreviewMouseMove, см. DragDropListHelper). Строка не
+             участвует в reorder (она не внутри плейлиста), поэтому обычный IsDragSource, а не
+             IsReorderSource. -->
+        <Border x:Name="CardRoot" Padding="10,8" CornerRadius="8" Background="{StaticResource AccentBrush}" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" Cursor="Hand"
+                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                behaviors:TrackContextMenuBehavior.Attach="True"
+                behaviors:DragDropListHelper.IsDragSource="True"
+                ContextMenu="{StaticResource TrackRowContextMenu}">
             <Border.InputBindings>
                 <MouseBinding MouseAction="LeftDoubleClick"
-                              Command="{Binding DataContext.PlayTrackCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                              Command="{Binding DataContext.PlayTrackCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                               CommandParameter="{Binding}" />
             </Border.InputBindings>
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="44" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="22" />
                 </Grid.ColumnDefinitions>
-                <Border Width="64" Height="64" CornerRadius="10">
+                <Border Width="44" Height="44" CornerRadius="6" VerticalAlignment="Center">
                     <Border.Background>
                         <ImageBrush ImageSource="{Binding CoverPath}" Stretch="UniformToFill" />
                     </Border.Background>
                 </Border>
                 <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding Title}" Foreground="{StaticResource ForegroundBrush}" FontWeight="SemiBold" FontSize="16" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{Binding Artist}" Foreground="{StaticResource MutedForegroundBrush}" FontSize="13" TextTrimming="CharacterEllipsis" Margin="0,3,0,8" />
+                    <TextBlock Text="{Binding Title}" Foreground="{StaticResource ForegroundBrush}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" />
+                    <TextBlock Text="{Binding Artist}" Foreground="{StaticResource MutedForegroundBrush}" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,2,0,3" ToolTip="{Binding Artist}" />
                     <StackPanel Orientation="Horizontal">
-                        <Border Background="#1AD4A574" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8,3">
+                        <Border Background="#1AD4A574" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" CornerRadius="4" Padding="6,1">
                             <TextBlock Text="{Binding Genre}" Foreground="{StaticResource PrimaryBrush}" FontSize="12" />
                         </Border>
                         <TextBlock Text="{Binding DurationText}" Foreground="{StaticResource MutedForegroundBrush}" FontSize="12" Margin="10,3,0,0" />
                     </StackPanel>
-                    <!-- Чипы тегов трека: до 3 inline + «+N» overflow-пилюля. Snapshot, не live —
-                         добавление тега в позицию ≥ 4 не отразится до перевыделения. MVP-ограничение. -->
+                    <!-- Snapshot обновляется уведомлением TagsByTrackId после изменений библиотеки. -->
                     <StackPanel Orientation="Horizontal" Margin="0,6,0,0" VerticalAlignment="Center">
+                        <StackPanel.Visibility>
+                            <MultiBinding Converter="{StaticResource LocalTrackTagsOverflowVisibilityMultiConverter}" ConverterParameter="0">
+                                <Binding Path="Id" />
+                                <Binding Path="DataContext.TagsByTrackId" RelativeSource="{RelativeSource AncestorType=Window}" />
+                            </MultiBinding>
+                        </StackPanel.Visibility>
                         <ItemsControl>
                             <ItemsControl.ItemsSource>
                                 <MultiBinding Converter="{StaticResource LocalTrackTagsFirstNMultiConverter}" ConverterParameter="3">
                                     <Binding Path="Id" />
-                                    <Binding Path="DataContext.TagsByTrackId" RelativeSource="{RelativeSource AncestorType=ListBox}" />
+                                    <Binding Path="DataContext.TagsByTrackId" RelativeSource="{RelativeSource AncestorType=Window}" />
                                 </MultiBinding>
                             </ItemsControl.ItemsSource>
                             <ItemsControl.ItemsPanel>
@@ -65,21 +98,21 @@
                             <Border.Visibility>
                                 <MultiBinding Converter="{StaticResource LocalTrackTagsOverflowVisibilityMultiConverter}" ConverterParameter="3">
                                     <Binding Path="Id" />
-                                    <Binding Path="DataContext.TagsByTrackId" RelativeSource="{RelativeSource AncestorType=ListBox}" />
+                                    <Binding Path="DataContext.TagsByTrackId" RelativeSource="{RelativeSource AncestorType=Window}" />
                                 </MultiBinding>
                             </Border.Visibility>
                             <TextBlock Foreground="{StaticResource PrimaryBrush}" FontSize="11" FontWeight="SemiBold">
                                 <TextBlock.Text>
                                     <MultiBinding StringFormat="+{0}" Converter="{StaticResource LocalTrackTagsOverflowCountMultiConverter}" ConverterParameter="3">
                                         <Binding Path="Id" />
-                                        <Binding Path="DataContext.TagsByTrackId" RelativeSource="{RelativeSource AncestorType=ListBox}" />
+                                        <Binding Path="DataContext.TagsByTrackId" RelativeSource="{RelativeSource AncestorType=Window}" />
                                     </MultiBinding>
                                 </TextBlock.Text>
                             </TextBlock>
                         </Border>
                     </StackPanel>
                 </StackPanel>
-                <Grid Grid.Column="2" Width="18" Height="64" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Grid Grid.Column="2" Width="18" Height="44" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <Ellipse x:Name="SelectedDot" Width="8" Height="8" Fill="{StaticResource PrimaryBrush}" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
                     <StackPanel x:Name="PlayingBars" Orientation="Horizontal" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Top" Height="14">
                         <Rectangle Width="3" Height="8" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource PrimaryBrush}" Margin="0,6,2,0" />
@@ -100,7 +133,7 @@
                 <DataTrigger.Binding>
                     <MultiBinding Converter="{StaticResource TrackIdentityMatchConverter}">
                         <Binding />
-                        <Binding RelativeSource="{RelativeSource AncestorType=ListBox}" Path="DataContext.PlayingTrack" />
+                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.PlayingTrack" />
                     </MultiBinding>
                 </DataTrigger.Binding>
                 <Setter TargetName="CardRoot" Property="Background" Value="#402A2018" />
@@ -115,7 +148,7 @@
         <Border Padding="12" CornerRadius="10" Background="#332A2A3F" BorderBrush="{StaticResource GoldBorderBrush}" BorderThickness="1" Margin="0,0,0,10" Cursor="Hand">
             <Border.InputBindings>
                 <MouseBinding MouseAction="LeftDoubleClick"
-                              Command="{Binding DataContext.ReplayHistoryEntryCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                              Command="{Binding DataContext.ReplayHistoryEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                               CommandParameter="{Binding}" />
             </Border.InputBindings>
             <Grid>

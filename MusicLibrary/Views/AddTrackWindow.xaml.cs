@@ -10,6 +10,7 @@ public partial class AddTrackWindow : Window
         InitializeComponent();
         SourceInitialized += (_, _) => NativeWindowAppearance.Apply(this);
         DataContext = viewModel;
+        Closed += (_, _) => viewModel.Dispose();
         viewModel.CloseRequested += (_, confirmed) =>
         {
             DialogResult = confirmed;
