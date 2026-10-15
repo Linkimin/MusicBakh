@@ -68,7 +68,7 @@ public sealed class SqliteListeningHistoryRepository : IListeningHistoryReposito
         var trackIds = aggregates.Select(a => a.TrackId).ToList();
         var tracks = ctx.Tracks
             .Where(t => trackIds.Contains(t.Id))
-            .ToDictionary(t => t.Id, MapEntityToTrack);
+            .ToDictionary(t => t.Id, TrackMapper.ToDomain);
 
         var result = new List<ListeningStats>(aggregates.Count);
         foreach (var agg in aggregates)
@@ -108,7 +108,7 @@ public sealed class SqliteListeningHistoryRepository : IListeningHistoryReposito
         var trackIds = recent.Select(r => r.TrackId).ToList();
         var tracks = ctx.Tracks
             .Where(t => trackIds.Contains(t.Id))
-            .ToDictionary(t => t.Id, MapEntityToTrack);
+            .ToDictionary(t => t.Id, TrackMapper.ToDomain);
 
         var result = new List<PlaybackEntry>(recent.Count);
         foreach (var r in recent)
@@ -130,7 +130,7 @@ public sealed class SqliteListeningHistoryRepository : IListeningHistoryReposito
             .Where(t => !ctx.ListeningHistory.Any(h => h.TrackId == t.Id))
             .OrderBy(t => t.IsBuiltIn ? 0 : 1)
             .ThenBy(t => t.Id)
-            .Select(t => MapEntityToTrack(t))
+            .Select(t => TrackMapper.ToDomain(t))
             .ToList();
     }
 
@@ -145,32 +145,9 @@ public sealed class SqliteListeningHistoryRepository : IListeningHistoryReposito
         ctx.SaveChanges();
     }
 
-    // Маппинг entity → Track. Дублирует SqliteTrackRepository.MapToDomain намеренно —
-    // вынос помещался бы в Core, что потянуло бы туда EF-сущности.
-    private static Track MapEntityToTrack(TrackEntity e) => new()
-    {
-        Id = e.Id,
-        Title = e.Title,
-        Artist = e.Artist,
-        Album = e.Album,
-        Genre = e.Genre,
-        Duration = TimeSpan.FromTicks(e.DurationTicks),
-        FilePath = e.FilePath,
-        CoverPath = e.CoverPath,
-        Rating = e.Rating,
-        Reaction = (TrackReaction)e.Reaction,
-        Year = e.Year,
-        TrackNumber = e.TrackNumber,
-        AlbumArtist = e.AlbumArtist,
-        // Критично: IsBuiltIn должен дотечь до UI. Иначе после перезапуска
-        // history-replay вернёт встроенный трек с IsBuiltIn=false, и кнопка
-        // «Удалить» активируется на shipped-файлы из install-папки.
-        IsBuiltIn = e.IsBuiltIn
-    };
-
     private static PlaybackEntry ToEntry(ListeningHistoryEntryEntity h) => new()
     {
-        Track = MapEntityToTrack(h.Track),
+        Track = TrackMapper.ToDomain(h.Track),
         PlayedAt = h.PlayedAtUtc
     };
 }

@@ -66,7 +66,7 @@ public sealed class SqlitePlaylistRepository : IPlaylistRepository
             .Where(pt => pt.PlaylistId == playlistId)
             .OrderBy(pt => pt.Position)
             .Select(pt => pt.Track)
-            .Select(MapToDomain)
+            .Select(TrackMapper.ToDomain)
             .ToList();
     }
 
@@ -118,12 +118,4 @@ public sealed class SqlitePlaylistRepository : IPlaylistRepository
         ctx.SaveChanges();
         tx.Commit();
     }
-
-    private static Track MapToDomain(TrackEntity e) => new()
-    {
-        Id = e.Id, Title = e.Title, Artist = e.Artist, Album = e.Album, Genre = e.Genre,
-        Duration = TimeSpan.FromTicks(e.DurationTicks), FilePath = e.FilePath, CoverPath = e.CoverPath,
-        Rating = e.Rating, Reaction = (TrackReaction)e.Reaction,
-        Year = e.Year, TrackNumber = e.TrackNumber, AlbumArtist = e.AlbumArtist, IsBuiltIn = e.IsBuiltIn
-    };
 }

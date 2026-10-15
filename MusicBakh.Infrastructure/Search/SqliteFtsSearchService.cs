@@ -48,29 +48,8 @@ LIMIT {limit}")
         var result = new List<Track>(entities.Count);
         foreach (TrackEntity e in entities)
         {
-            result.Add(MapToDomain(e));
+            result.Add(TrackMapper.ToDomain(e));
         }
         return result;
     }
-
-    // Дублирование маппинга с SqliteTrackRepository осознанное: общий helper потянул бы
-    // entity-тип в Core или потребовал отдельной internal-сборки. На двух местах это
-    // мелочь, разлететься в третье — повод вынести.
-    private static Track MapToDomain(TrackEntity e) => new()
-    {
-        Id = e.Id,
-        Title = e.Title,
-        Artist = e.Artist,
-        Album = e.Album,
-        Genre = e.Genre,
-        Duration = TimeSpan.FromTicks(e.DurationTicks),
-        FilePath = e.FilePath,
-        CoverPath = e.CoverPath,
-        Rating = e.Rating,
-        Reaction = (TrackReaction)e.Reaction,
-        Year = e.Year,
-        TrackNumber = e.TrackNumber,
-        AlbumArtist = e.AlbumArtist,
-        IsBuiltIn = e.IsBuiltIn
-    };
 }
